@@ -205,6 +205,11 @@ sim.dt            = 1e-4;     % s   fixed step (for Simscape)
 sim.solver        = 'ode23t';
 sim.rpm_init      = 1200;     % RPM  initial engine speed
 sim.tension_init  = 480;      % N    initial static tension
+% WLTC duty cycle weights (must sum to 100)
+sim.dutyCycle.wltcLow    = 25;   % % time at low speed   (~900 RPM)
+sim.dutyCycle.wltcMed    = 25;   % % time at medium      (~1200 RPM)
+sim.dutyCycle.wltcHigh   = 25;   % % time at high        (~1600 RPM)
+sim.dutyCycle.wltcXHigh  = 25;   % % time at extra-high  (~2000 RPM)
 
 %% ═══════════════════════════════════════════════════════════════════════════
 %  12. DRIVE CYCLE  (RPM profile for FEAD test)
