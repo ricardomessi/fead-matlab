@@ -1,5 +1,18 @@
-# Gates FEAD Belt Drive – MATLAB Test Rig & Truck System
-## Ashok Leyland H6 · Simscape / Simulink Model Suite
+# Gates FEAD Belt Drive Test Rig — MATLAB Suite
+## Ashok Leyland H6 · Simscape / Simulink / Interactive App
+
+[![GitHub](https://img.shields.io/badge/Repo-ricardomessi%2Ffead--matlab-blue)](https://github.com/ricardomessi/fead-matlab)
+
+---
+
+## 🚀 Quick Start
+
+**Double-click `RUN_ALL.bat`** and select option `[1]` — or in MATLAB:
+
+```matlab
+>> FEAD_params      % load all parameters first
+>> FEAD_App         % launch full interactive app
+```
 
 ---
 
@@ -7,189 +20,192 @@
 
 ```
 fead-matlab/
-├── FEAD_params.m              ← Run this FIRST (loads all parameters)
-├── build_FEAD_model.m         ← Builds FEAD_BeltDrive.slx (Simscape test rig)
-├── build_truck_model.m        ← Builds H6_Truck_System.slx (full truck)
-├── layout_editor.m            ← Interactive drag-and-drop pulley layout GUI
-├── run_fead_sim.m             ← Simulate FEAD + generate 6 result plots
-├── run_truck_sim.m            ← Simulate truck + generate 9 result plots
-└── subsystems/
-    └── build_waterpump_ss.m   ← Water pump Simscape subsystem + bearing life
+│
+├── 🟡 FEAD_App.m              ← MAIN APP — full UI, animation, validation
+├── 🟡 FEAD_params.m           ← Run FIRST — loads all physical parameters
+├── 🟡 startup_fead.m          ← Auto-runs on MATLAB open (sets path + welcome)
+│
+├── ⚙  Core Simulation
+│   ├── run_fead_sim.m         ← RPM sweep → 6 result plots (no Simulink)
+│   ├── run_truck_sim.m        ← ODE45 truck sim → 9 result plots (no Simulink)
+│   └── FEAD_PostProcess.m     ← Post-process Simscape results → 9 plots
+│
+├── 🔧 Simscape Model Builders
+│   ├── FEAD_TestRig_Builder.m ← Builds FEAD_TestRig.slx (Simscape physical)
+│   ├── build_FEAD_model.m     ← Builds FEAD_BeltDrive.slx
+│   ├── build_truck_model.m    ← Builds H6_Truck_System.slx
+│   └── subsystems/
+│       └── build_waterpump_ss.m ← WP subsystem + bearing life
+│
+├── 🧩 App Components
+│   ├── FEAD_Animation.m       ← Real-time belt drive animation engine
+│   ├── FEAD_Validator.m       ← 8-check validation + layout optimizer
+│   ├── FEAD_DataWindow.m      ← Separate live data window (5 tabs)
+│   ├── FEAD_BeltLibrary.m     ← Belt catalog (6 types: Gates/Conti/Dayco)
+│   └── layout_editor.m        ← Standalone drag-and-drop layout editor
+│
+├── 🌐 GitHub Integration
+│   └── push_to_github.m       ← Commit + push results (reads GH_TOKEN env var)
+│
+└── 📋 Launchers
+    └── RUN_ALL.bat            ← One-click interactive launcher
 ```
 
 ---
 
-## ⚡ Quick Start
+## 🖥️ FEAD App Features
 
-### 1. Load all parameters
-```matlab
->> FEAD_params
-```
+### Left Panel — Controls
+| Control | Description |
+|---------|-------------|
+| **Belt Selector** | 6 belt types: Gates MT620 AMD (8-rib/6-rib), ContiTech, Dayco, V-belt |
+| **RPM Slider** | 400–2500 RPM — all plots update live |
+| **Tension Slider** | 100–1000 N static tension |
+| **Tensioner Position** | FREE / REPLACE / MAX / MEAN / MIN / LOAD |
+| **AC Compressor checkbox** | Toggle AC load on/off |
+| **Night Run checkbox** | Alternator at maximum load |
+| **BAS checkbox** | Belt-Alternator-Starter mode |
+| **Temperature input** | Operating temperature check |
+| **Pulley layout table** | Edit X / Y / R for all 6 pulleys numerically |
 
-### 2. Run FEAD simulation (no Simulink needed)
-```matlab
->> run_fead_sim
-```
-Outputs: hub loads, tensions, slip SF, fatigue life, bearing life, friction plots.
+### Centre Panel — Live Animation
+- 🔴 **Rotating pulleys** with spokes, hub, and outer disc
+- 🟡 **Moving belt markers** (travel speed ∝ RPM)
+- 🔴 **Hub load arrows** (quiver, magnitude to scale)
+- 🟢 **Slip status rings** (green=OK, amber=marginal, red=SLIP)
+- **Drag pulleys** with mouse to move them — validation updates on release
+- Live RPM / belt velocity / design score overlays
 
-### 3. Run full truck simulation (no Simulink needed)
-```matlab
->> run_truck_sim
-```
-Outputs: speed trace, RPM, gear shifts, FEAD loss, power budget, tire slip.
+### Right Panel — 5 Plot Tabs
+1. **Hub Loads vs RPM** — all 6 pulleys + PDF reference markers
+2. **Belt Tensions** — tight (solid) + slack (dashed) vs RPM
+3. **Slip Safety Factor** — Capstan SF vs RPM (SF=1 red line)
+4. **Belt Fatigue Life** — Wöhler + Palmgren-Miner (WLTC weighted, km)
+5. **Validation** — pass/fail bar chart + suggestion text area
 
-### 4. Open the interactive layout editor
-```matlab
->> layout_editor
-```
-Drag pulleys, edit coordinates numerically, see live hub-load arrows update.
-
-### 5. Build Simscape models (requires Simulink + Simscape)
-```matlab
->> build_FEAD_model       % creates FEAD_BeltDrive.slx
->> build_truck_model      % creates H6_Truck_System.slx
-```
-
-### 6. Water pump subsystem
-```matlab
->> build_waterpump_ss     % creates WaterPump_Subsystem.slx + plots
-```
-
----
-
-## 🔩 FEAD System Data (Gates PDF Datum)
-
-| Pulley | X (mm) | Y (mm) | R (mm) | SR | Hub Force (N) | Dir (°) |
-|--------|--------|--------|--------|----|---------------|---------|
-| CRK | 0 | 0 | 79.57 | 1.000 | 2658.9 | 96 |
-| FAN | 6 | 213.5 | 60.495 | 1.302 | 2866.4 | 258 |
-| IDR | -122 | 235 | 38.7 | 2.069 | 1710.1 | 77 |
-| ALT | -255 | 373.2 | 30.07 | 2.577 | 1678.1 | 279 |
-| AC | -265 | 189 | 59.655 | 1.320 | 985.8 | 49 |
-| TEN | -153.25 | 96.0 | 38.7 | 2.069 | 608.5 | 237 |
-
-**Belt:** Gates MT620 AMD 8-Rib Aramid · L = 1577.3 mm · μ = 0.35 · m = 0.18 kg/m
+### Action Buttons
+| Button | Action |
+|--------|--------|
+| ▶ Start Animation | 25 Hz timer-driven live animation |
+| ✔ Validate Design | Run all 8 checks → score alert |
+| ⚙ Optimize Layout | Move tensioner to minimize total hub load |
+| 📊 Data Window | Open separate 5-tab live data window |
+| 🔧 Build Simscape | Build `FEAD_TestRig.slx` and open in Simulink |
+| ⬆ Push to GitHub | Commit layout JSON + validation report |
+| ↺ Reset Datum | Restore Gates PDF reference coordinates |
+| ⬇ Import from Web | Load `.json` exported from web tool |
 
 ---
 
-## 🚛 Truck System Parameters
+## 📐 Physics & Validation Checks (8 checks → score out of 100)
 
-| Parameter | Value |
+| # | Check | Limit | Physics |
+|---|-------|-------|---------|
+| 1 | Belt velocity | ≤ v_max (30 m/s) | v = π·d_CRK·n/60 |
+| 2 | Slip safety factor | SF ≥ 1.3 all pulleys | SF = ln(Tt/Ts)/(μ·θ) |
+| 3 | Max tension | ≤ T_max (3000 N) | Tt = T₀ + Teff/2 + Tc |
+| 4 | Min wrap angle | ≥ 60° all pulleys | geometry from XY coords |
+| 5 | Span lengths | 30–600 mm | Euclidean distance |
+| 6 | Hub loads | ≤ 5000 N | vector sum of span tensions |
+| 7 | Belt fatigue life | ≥ 200 000 km | Wöhler + Palmgren-Miner |
+| 8 | Temperature | within belt rating | ±1°C per spec |
+
+---
+
+## 📊 Live Data Window (5 Tabs)
+
+| Tab | Content |
+|-----|---------|
+| **Hub Loads** | F_hub, direction, T_tight, T_slack, T_centrifugal per pulley |
+| **Tensions** | Power(kW), v_belt, T_eff, T_tight, T_slack, Slip SF per pulley |
+| **Validation** | Score badge, 8-check table, suggestions text area |
+| **Fatigue/Life** | Life(km), Miner damage, WP bearing L10A/L10B/composite |
+| **Belt Data** | All belt physical properties + current utilisation % |
+
+---
+
+## 🔩 Simscape Test Rig (`FEAD_TestRig.slx`)
+
+Built by `FEAD_TestRig_Builder.m`:
+
+```
+EngineSource (ω source)
+    │
+    ├─── CRK_Iz (inertia) ──► CRK_Spring ──► CRK_LoadTorque (LUT)
+    │                                              │
+    ├─── FAN_Iz ──► FAN_Spring ──► FAN_LoadTorque │
+    ├─── IDR_Iz ──► IDR_Spring ──► IDR_LoadTorque │
+    ├─── ALT_Iz ──► ALT_Spring ──► ALT_LoadTorque │  ◄── All measured
+    ├─── AC_Iz  ──► AC_Spring  ──► AC_LoadTorque  │      by TorqSensor
+    └─── TEN_Iz ──► TEN_Arm_Spring + TEN_Arm_Damp │      + To Workspace
+```
+
+All torques and angular velocities logged to workspace as `{pulley}_torque` and `{pulley}_omega`.
+
+---
+
+## 🚛 Truck System (`H6_Truck_System.slx`)
+
+| Subsystem | Model |
 |-----------|-------|
-| Engine | AL H6 6-Cyl Diesel · 175 kW @ 2400 RPM |
-| Max Torque | 800 Nm @ 1200–1600 RPM |
-| GVW | 16 000 kg |
-| Transmission | 6-speed AMT [6.56 … 1.00] · Final drive 4.10 |
-| Tyres | 315/80 R22.5 · R_loaded = 0.513 m |
-| Drive config | 6×4 (4 driven wheels) |
-| Wheelbase | 4.20 m |
+| Driver | PID speed controller |
+| Engine | 2D torque map (RPM × throttle) + flywheel inertia |
+| FEAD | Power LUT per accessory → parasitic torque |
+| AMT | RPM-threshold 6-speed gear selection |
+| Driveline | Torsional spring-damper propshaft |
+| Wheels | Pacejka magic formula (B=10, C=1.9, D=μ·Fz) |
+| Chassis | Longitudinal F=ma with aero + grade |
+| Brakes | Friction brake demand |
 
 ---
 
-## 📐 FEAD Subsystems
-
-| Subsystem | Physics Model |
-|-----------|--------------|
-| **Belt Dynamics** | Capstan equation T_tight/T_slack = e^(μθ) |
-| **Centrifugal Tension** | Tc = ṁ·v² |
-| **Belt Slip SF** | SF = ln(Tt/Ts) / (μ·θ) |
-| **Fatigue Life** | Wöhler + Palmgren-Miner (WLTC duty cycle) |
-| **WP Bearing Life** | ISO 281 L10 (Ball + Roller series composite) |
-| **Frictional Power** | ΔP = μ_bearing · F_hub · ω · R (AC vs no-AC) |
-| **Tensioner** | Angular spring-damper: J·θ̈ + c·θ̇ + k·θ = T_belt |
-
----
-
-## 🚗 Truck Subsystems
-
-| Subsystem | Physics Model |
-|-----------|--------------|
-| **Driver** | PID speed controller → throttle/brake demand |
-| **Engine** | 2D lookup map (RPM × throttle → Nm) + flywheel inertia |
-| **FEAD** | Power lookup tables per accessory → parasitic torque |
-| **Transmission** | RPM-based gear selection + final drive ratio |
-| **Driveline** | Torsional spring-damper propshaft + open differential |
-| **Wheels** | Pacejka magic formula (B=10, C=1.9, D=μ·Fz, E=0.97) |
-| **Chassis** | Longitudinal F=ma: traction – aero – rolling – grade |
-| **Brakes** | Friction brake force: F_brk = demand × μ_peak × m·g |
-| **Water Pump** | Gear-driven centrifugal pump + ISO 281 L10 life |
-
----
-
-## 🔧 Editing Pulley Positions
-
-### Method 1 — Layout Editor GUI (recommended)
-```matlab
->> layout_editor
-```
-- Drag any pulley on the canvas
-- Type exact X/Y/R values in the table
-- Move the RPM slider — hub-load arrows update instantly
-- Click **Save to Workspace** → updates `pulleys` variable
-- Click **Run Simulation** → rebuilds model and plots results
-
-### Method 2 — Edit FEAD_params.m directly
-Change the `pulleys(k).x`, `.y`, `.r` values and re-run `FEAD_params`.
-
-### Method 3 — In the command window
-```matlab
->> pulleys(1).x = 10;   % move CRK 10mm in X
->> pulleys(3).y = 240;  % move IDR
->> run_fead_sim          % recompute immediately
-```
-
----
-
-## 📊 Result Plots (run_fead_sim)
-
-1. Hub Loads vs RPM (all 6 pulleys + PDF reference points)
-2. Belt Tensions — tight side (solid) & slack side (dashed)
-3. Slip Safety Factor vs RPM (red line = slip limit SF=1)
-4. WP Bearing Life L10A / L10B / Composite vs RPM
-5. FEAD Power: AC-ON vs No-AC comparison
-6. Belt Fatigue Life per pulley (WLTC weighted, km)
-
-## 📊 Result Plots (run_truck_sim)
-
-1. Vehicle speed vs reference
-2. Engine RPM trace
-3. Gear shifts (AMT staircase)
-4. Engine output torque
-5. FEAD parasitic loss over drive cycle
-6. Throttle & brake demand
-7. Wheel speed vs body speed (tire slip check)
-8. Power budget: Engine / Traction / FEAD loss
-9. Speed trace coloured by gear
-
----
-
-## ⚙️ MATLAB Toolbox Requirements
-
-| Feature | Required Toolbox |
-|---------|-----------------|
-| `run_fead_sim`, `run_truck_sim` | **Base MATLAB only** (ODE45) |
-| `layout_editor` | **Base MATLAB only** (uifigure) |
-| `build_FEAD_model` | Simulink + **Simscape** |
-| `build_truck_model` | Simulink + **Simscape** |
-| `build_waterpump_ss` | Simulink + **Simscape** |
-| Driveline blocks | Simscape Driveline *(optional)* |
-
-> **Note:** The `run_*.m` scripts work in base MATLAB without Simulink.
-> The `build_*.m` scripts require Simulink + Simscape to create `.slx` files.
-
----
-
-## 📤 Exporting Results
+## ⚙️ GitHub Integration
 
 ```matlab
-% Save workspace results to Excel
-writematrix([fead_sim_results.rpm_sweep' fead_sim_results.F_hub'], ...
-    'FEAD_Results.xlsx', 'Sheet','HubLoads');
+% Set token once per session (never in code):
+>> setenv('GH_TOKEN','your_token_here')
 
-% Save figures as PDF
-exportgraphics(gcf, 'FEAD_Results.pdf', 'ContentType','vector');
+% Push from within FEAD_App (button), or manually:
+>> push_to_github(pulleys, belt, report)
 ```
+Pushes: `latest_layout.json` + `VALIDATION_REPORT.md` + all `.m` files
+
+**Repository:** https://github.com/ricardomessi/fead-matlab
 
 ---
 
-*Gates FEAD Advanced Engineering Suite · Ashok Leyland H6 · ISO 281 / Wöhler / Capstan*
+## 🌐 Import from Web Tool
+
+1. Open your **belt-drive-advanced** website
+2. Configure layout + conditions
+3. Export JSON (Download button)
+4. In FEAD_App → **⬇ Import from Web** → select `.json`
+5. Layout and conditions applied instantly
+
+---
+
+## 📋 MATLAB Toolbox Requirements
+
+| Feature | Required |
+|---------|---------|
+| `FEAD_App`, `run_fead_sim`, `run_truck_sim` | **Base MATLAB only** |
+| `FEAD_TestRig_Builder`, `build_FEAD_model` | Simulink + **Simscape** |
+| `build_truck_model` | Simulink + Simscape + Simscape Driveline *(optional)* |
+| `build_waterpump_ss` | Simulink + Simscape |
+
+---
+
+## 🔧 Belt Catalog
+
+| Belt | Brand | Ribs | L (mm) | Core | T_max (N) |
+|------|-------|------|--------|------|-----------|
+| MT620 AMD 8-Rib | Gates | 8 | 1577 | Aramid | 3000 |
+| MT620 AMD 6-Rib | Gates | 6 | 1577 | Aramid | 2250 |
+| MT480 6-Rib | Gates | 6 | 1480 | Polyester | 2200 |
+| 8PK1600 MultiRib | ContiTech | 8 | 1600 | Aramid | 2900 |
+| HVAC 8PK1575 | Dayco | 8 | 1575 | Aramid | 2950 |
+| A-Section | Gates | 1 | 1397 | Polyester | 1800 |
+
+---
+
+*Gates FEAD Advanced Engineering Suite · Ashok Leyland H6 · ISO 281 / Wöhler / Capstan · WLTC Duty Cycle*
