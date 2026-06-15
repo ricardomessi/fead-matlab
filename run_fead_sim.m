@@ -252,8 +252,10 @@ grid(ax4,'on');
 %% Plot 5: FEAD Power (AC vs No-AC)
 ax5 = subplot(2,3,5,'Parent',fig_main);
 hold(ax5,'on'); set(ax5,'Color',AX,'XColor',TC,'YColor',TC,'GridColor',[0.2 0.3 0.4],'GridAlpha',0.5,'Box','on');
-area(ax5,rpm_sweep,P_AC_on,'FaceColor',[0.96 0.28 0.71 0.25],'EdgeColor',[0.96 0.28 0.71],'LineWidth',2,'DisplayName','AC ON');
-area(ax5,rpm_sweep,P_AC_off,'FaceColor',[0.55 0.36 0.96 0.25],'EdgeColor',[0.65 0.54 0.98],'LineWidth',2,'DisplayName','No AC');
+h_ac_on  = area(ax5,rpm_sweep,P_AC_on, 'FaceColor',[0.96 0.28 0.71],'EdgeColor',[0.96 0.28 0.71],'LineWidth',2,'DisplayName','AC ON');
+h_ac_off = area(ax5,rpm_sweep,P_AC_off,'FaceColor',[0.55 0.36 0.96],'EdgeColor',[0.65 0.54 0.98],'LineWidth',2,'DisplayName','No AC');
+h_ac_on.FaceAlpha  = 0.25;
+h_ac_off.FaceAlpha = 0.25;
 plot(ax5,rpm_sweep,delta_P,'Color',[0.94 0.27 0.27],'LineWidth',2,'DisplayName','ΔP (AC overhead)');
 xlabel(ax5,'RPM','Color',TC); ylabel(ax5,'Power (kW)','Color',TC);
 title(ax5,'FEAD Power: AC vs Non-AC','Color',[0.96 0.62 0.04],'FontWeight','bold');

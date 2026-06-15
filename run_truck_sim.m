@@ -168,7 +168,8 @@ title(ax4,'Engine Output Torque','Color',AM,'FontWeight','bold'); grid(ax4,'on')
 
 %% 5 – FEAD parasitic loss
 ax5 = mkax(5); set(ax5,'Color',AX,'XColor',TC,'YColor',TC,'GridColor',[0.2 0.3 0.4],'GridAlpha',0.5,'Box','on');
-area(T_sol,P_fead_v,'FaceColor',[PK 0.25],'EdgeColor',PK,'LineWidth',2);
+h_fead = area(ax5,T_sol,P_fead_v,'FaceColor',PK,'EdgeColor',PK,'LineWidth',2);
+h_fead.FaceAlpha = 0.25;
 xlabel(ax5,'Time (s)','Color',TC); ylabel(ax5,'Power (kW)','Color',TC);
 title(ax5,'FEAD Parasitic Loss','Color',AM,'FontWeight','bold'); grid(ax5,'on');
 
@@ -196,9 +197,10 @@ ax8 = mkax(8); set(ax8,'Color',AX,'XColor',TC,'YColor',TC,'GridColor',[0.2 0.3 0
 P_eng_kW  = T_eng_v .* omega_eng_sol / 1000;
 P_trac_kW = P_eng_kW - P_fead_v;
 hold(ax8,'on');
-area(T_sol,P_eng_kW, 'FaceColor',[AM 0.2],'EdgeColor',AM,'LineWidth',2,'DisplayName','Engine');
-area(T_sol,max(P_trac_kW,0),'FaceColor',[GR 0.2],'EdgeColor',GR,'LineWidth',2,'DisplayName','Traction');
-area(T_sol,P_fead_v, 'FaceColor',[PK 0.2],'EdgeColor',PK,'LineWidth',2,'DisplayName','FEAD loss');
+h1 = area(ax8,T_sol,P_eng_kW,        'FaceColor',AM,'EdgeColor',AM,'LineWidth',2,'DisplayName','Engine');
+h2 = area(ax8,T_sol,max(P_trac_kW,0),'FaceColor',GR,'EdgeColor',GR,'LineWidth',2,'DisplayName','Traction');
+h3 = area(ax8,T_sol,P_fead_v,        'FaceColor',PK,'EdgeColor',PK,'LineWidth',2,'DisplayName','FEAD loss');
+h1.FaceAlpha = 0.2;  h2.FaceAlpha = 0.2;  h3.FaceAlpha = 0.2;
 xlabel(ax8,'Time (s)','Color',TC); ylabel(ax8,'Power (kW)','Color',TC);
 title(ax8,'Power Budget','Color',AM,'FontWeight','bold');
 legend(ax8,'TextColor',TC,'Color',AX); grid(ax8,'on');
