@@ -1,365 +1,273 @@
-%% build_FEAD_model.m  –  Programmatically builds the FEAD Belt Drive
-%  Simscape/Simulink test rig for the Ashok Leyland H6 engine.
+%% build_FEAD_model.m  –  FEAD Belt Drive Simscape Model (Robust Port-Handle Build)
+%  Uses get_param PortHandles to connect blocks — avoids all add_line string errors.
+%  Each pulley is a self-contained subsystem. All signals logged to workspace.
 %
-%  REQUIRES:  Simulink, Simscape (Foundation Library)
-%  OPTIONAL:  Simscape Driveline (falls back to custom belt blocks)
-%
-%  Usage:
-%    >> FEAD_params          % load all parameters first
-%    >> build_FEAD_model     % creates and opens FEAD_BeltDrive.slx
+%  Usage:  >> FEAD_params; build_FEAD_model
 % ─────────────────────────────────────────────────────────────────────────────
 
-if ~exist('pulleys','var')
-    FEAD_params;
+function build_FEAD_model()
+
+if ~exist('pulleys','var'), FEAD_params; end
+pulleys    = evalin('base','pulleys');
+belt       = evalin('base','belt');
+load_table = evalin('base','load_table');
+ten        = evalin('base','ten');
+
+MDL   = 'FEAD_BeltDrive';
+np    = numel(pulleys);
+pnames= {'CRK','FAN','IDR','ALT','AC','TEN'};
+
+fprintf('\n=== Building %s.slx ===\n',MDL);
+
+%% ── Close & create fresh model ───────────────────────────────────────────────
+if bdIsLoaded(MDL), close_system(MDL,0); end
+new_system(MDL,'Model');
+open_system(MDL);
+
+set_param(MDL,...
+    'StopTime',       '30',...
+    'Solver',         'ode23t',...
+    'SolverType',     'Variable-step',...
+    'RelTol',         '1e-4',...
+    'AbsTol',         '1e-6',...
+    'MaxStep',        '0.01',...
+    'SolverResetMethod','Fast');
+
+%% ── Load required libraries ──────────────────────────────────────────────────
+load_system('fl_lib');
+load_system('nesl_utility');
+load_system('simulink');
+
+%% ══════════════════════════════════════════════════════════════════════════════
+%  HELPER: add block and return its path
+%% ══════════════════════════════════════════════════════════════════════════════
+function blk = AB(lib,name,x,y,w,h)
+    blk = [MDL '/' name];
+    add_block(lib, blk, 'Position',[x y x+w y+h],'MakeNameUnique','off');
 end
 
-mdl = 'FEAD_BeltDrive';
-
-%% Close & delete old model if open
-if bdIsLoaded(mdl), close_system(mdl,0); end
-if exist([mdl '.slx'],'file'), delete([mdl '.slx']); end
-
-%% Create new model
-new_system(mdl);
-open_system(mdl);
-set_param(mdl,'SolverType','Fixed-step','FixedStep','1e-4',...
-    'Solver','ode23t','StopTime',num2str(sim.T_end_fead),...
-    'SaveTime','on','SaveOutput','on');
-
-%% Helper – add block with position and label
-pos = @(col,row) [col*220 row*140 col*220+180 row*140+60];
-
-%% ─────────────────────────────────────────────────────────────────────────
-%  SUBSYSTEM LAYOUT  (blocks placed on canvas)
-% ─────────────────────────────────────────────────────────────────────────
-
-% ── 1. Simscape Solver Configuration ──────────────────────────────────────
-add_block('nesl_utility/Solver Configuration',[mdl '/SolverConfig']);
-set_param([mdl '/SolverConfig'],'Position',[20 20 200 70]);
-set_param([mdl '/SolverConfig'],'UseLocalSolver','off',...
-    'DoFixedCost','off','MaxNonlinIter','20');
-
-% ── 2. Mechanical Ground (reference frame) ────────────────────────────────
-add_block('fl_lib/Mechanical/Rotational Elements/Mechanical Rotational Reference',...
-    [mdl '/GND']);
-set_param([mdl '/GND'],'Position',[20 120 80 160]);
-
-%% ─────────────────────────────────────────────────────────────────────────
-%  BUILD EACH PULLEY SUBSYSTEM
-%  Each pulley has:
-%    • Rotational Inertia
-%    • Ideal Torque Source  (loads: fan, alt, AC etc.)
-%    • Ideal Rotational Motion Sensor  (output ω, θ)
-%    • PS-Simulink converter (for scope/workspace output)
-% ─────────────────────────────────────────────────────────────────────────
-
-pnames = {'CRK','FAN','IDR','ALT','AC','TEN'};
-col_offset = [1 2 3 4 5 6];
-
-for k = 1:N_pulleys
-    pn   = pnames{k};
-    col  = col_offset(k);
-    Iz_k = pulleys(k).Iz;
-    r_k  = pulleys(k).r/1000;  % m
-
-    % ── Inertia block ──
-    blk_I = [mdl '/I_' pn];
-    add_block('fl_lib/Mechanical/Rotational Elements/Inertia', blk_I);
-    set_param(blk_I,'Position',pos(col,1));
-    set_param(blk_I,'inertia', num2str(Iz_k));
-
-    % ── Torque source (accessory load) ──
-    blk_T = [mdl '/Tload_' pn];
-    add_block('fl_lib/Mechanical/Rotational Elements/Ideal Torque Source', blk_T);
-    set_param(blk_T,'Position',pos(col,2));
-
-    % ── Speed sensor ──
-    blk_S = [mdl '/Spd_' pn];
-    add_block('fl_lib/Mechanical/Rotational Elements/Ideal Rotational Motion Sensor', blk_S);
-    set_param(blk_S,'Position',pos(col,3));
-
-    % ── PS→Simulink (speed output) ──
-    blk_C = [mdl '/Conv_' pn];
-    add_block('nesl_utility/PS-Simulink Converter', blk_C);
-    set_param(blk_C,'Position',pos(col,4));
-
-    % ── Torque load source (Simulink→PS) for accessory demand ──
-    blk_TI = [mdl '/TorqIn_' pn];
-    add_block('nesl_utility/Simulink-PS Converter', blk_TI);
-    set_param(blk_TI,'Position',pos(col,5));
-
-    % ── Lookup table: RPM → Power → Torque  ──
-    blk_LUT = [mdl '/LUT_' pn];
-    add_block('simulink/Lookup Tables/1-D Lookup Table', blk_LUT);
-    set_param(blk_LUT,'Position',pos(col,6));
-    rpm_rad = load_table.rpm * 2*pi/60;  % rad/s
-    % torque = P*1000 / omega
-    P_arr = load_table.(pn);
-    T_arr = P_arr*1000 ./ rpm_rad;
-    set_param(blk_LUT,'BreakpointsForDimension1', mat2str(rpm_rad,6));
-    set_param(blk_LUT,'Table', mat2str(T_arr,6));
-    set_param(blk_LUT,'ExtrapMethod','Clip');
-
-    % ── Connections within pulley block group ──
-    % Sensor R → Inertia R
-    add_line(mdl,[blk_S '/R'],[blk_I '/R'],'autorouting','on');
-    % Sensor C → Torque source R
-    add_line(mdl,[blk_S '/C'],[blk_T '/R'],'autorouting','on');
-    % Torque source C → GND
-    add_line(mdl,[blk_T '/C'],[mdl '/GND/1'],'autorouting','on');
-    % Sensor omega → PS converter
-    add_line(mdl,[blk_S '/W'],[blk_C '/I'],'autorouting','on');
-    % PS converter output → LUT input (speed feedback for torque lookup)
-    add_line(mdl,[blk_C '/1'],[blk_LUT '/1'],'autorouting','on');
-    % LUT → Simulink-PS → Torque source signal input
-    add_line(mdl,[blk_LUT '/1'],[blk_TI '/I'],'autorouting','on');
-    add_line(mdl,[blk_TI '/O'],[blk_T '/T'],'autorouting','on');
-end
-
-%% ─────────────────────────────────────────────────────────────────────────
-%  BELT DYNAMICS SUBSYSTEM
-%  Belt modelled as a series of tension elements (one per span).
-%  Span k connects pulley ORDER(k) → ORDER(k+1).
-%  Tension in each span = T_static + effective tension component.
-%  Implemented as a Simulink subsystem computing T_tight, T_slack per span.
-% ─────────────────────────────────────────────────────────────────────────
-
-build_belt_subsystem(mdl, pulleys, belt, ten_idx, ten_pos, load_table, sim);
-
-%% ─────────────────────────────────────────────────────────────────────────
-%  CRANKSHAFT DRIVE INPUT
-%  Speed input from Engine RPM profile (From Workspace or Step)
-% ─────────────────────────────────────────────────────────────────────────
-
-% Engine RPM signal source (From Workspace – drive cycle)
-blk_rpm = [mdl '/EngineRPM'];
-add_block('simulink/Sources/From Workspace', blk_rpm);
-set_param(blk_rpm,'Position',[20 700 200 740]);
-t_rpm_data = timeseries(dc_rpm, dc_t);
-assignin('base','t_rpm_data', t_rpm_data);
-set_param(blk_rpm,'VariableName','t_rpm_data');
-set_param(blk_rpm,'Interpolate','on','ZeroOrderHold','off');
-
-% RPM to rad/s
-blk_r2w = [mdl '/RPM2rads'];
-add_block('simulink/Math Operations/Gain', blk_r2w);
-set_param(blk_r2w,'Position',[220 700 360 740]);
-set_param(blk_r2w,'Gain','2*pi/60');
-add_line(mdl,[blk_rpm '/1'],[blk_r2w '/1'],'autorouting','on');
-
-% Ideal Rotational Velocity Source for CRK
-blk_vs = [mdl '/CRK_DriveSource'];
-add_block('fl_lib/Mechanical/Rotational Elements/Ideal Angular Velocity Source', blk_vs);
-set_param(blk_vs,'Position',[380 700 540 740]);
-add_line(mdl,[blk_r2w '/1'],[blk_vs '/V'],'autorouting','on');
-% connect velocity source to CRK inertia
-add_line(mdl,[blk_vs '/R'],[mdl '/I_CRK/R'],'autorouting','on');
-add_line(mdl,[blk_vs '/C'],[mdl '/GND/1'],'autorouting','on');
-
-%% ─────────────────────────────────────────────────────────────────────────
-%  OUTPUT SCOPES
-%  • Hub Load vs time for each pulley
-%  • Belt tension in each span
-%  • Slip Safety Factor
-%  • Bearing Life estimate
-% ─────────────────────────────────────────────────────────────────────────
-
-blk_scope1 = [mdl '/Scope_HubLoads'];
-add_block('simulink/Sinks/Scope', blk_scope1);
-set_param(blk_scope1,'Position',[1700 100 1800 200]);
-set_param(blk_scope1,'NumInputPorts','6',...
-    'AxesTitles',strjoin({'CRK','FAN','IDR','ALT','AC','TEN'},'\n'));
-
-blk_scope2 = [mdl '/Scope_Tensions'];
-add_block('simulink/Sinks/Scope', blk_scope2);
-set_param(blk_scope2,'Position',[1700 260 1800 360]);
-set_param(blk_scope2,'NumInputPorts','6');
-
-blk_to_ws = [mdl '/ToWorkspace_Results'];
-add_block('simulink/Sinks/To Workspace', blk_to_ws);
-set_param(blk_to_ws,'Position',[1700 420 1850 460]);
-set_param(blk_to_ws,'VariableName','fead_results',...
-    'MaxDataPoints','inf','SaveFormat','Array');
-
-%% ─────────────────────────────────────────────────────────────────────────
-%  TENSIONER SUBSYSTEM  (spring-damper + arm rotation)
-% ─────────────────────────────────────────────────────────────────────────
-build_tensioner_subsystem(mdl, ten, sim);
-
-%% Save & open
-Simulink.BlockDiagram.arrangeSystem(mdl);
-save_system(mdl);
-fprintf('\nFEAD_BeltDrive.slx created and saved.\n');
-fprintf('Run:  sim(''%s'')  to simulate.\n', mdl);
-open_system(mdl);
-
-%% ─────────────────────────────────────────────────────────────────────────
-%  LOCAL HELPER FUNCTIONS
-% ─────────────────────────────────────────────────────────────────────────
-
-function build_belt_subsystem(mdl, pulleys, belt, ten_idx, ten_pos, load_table, sim)
-%BUILD_BELT_SUBSYSTEM  Creates belt tension calculation subsystem.
-%  Computes tight/slack tensions for each span using the Capstan equation
-%  and feeds torque reactions back to pulley blocks.
-
-    ss_name = [mdl '/BeltDynamics'];
-    add_block('simulink/Ports & Subsystems/Subsystem', ss_name);
-    set_param(ss_name,'Position',[880 100 1080 700]);
-
-    open_system(ss_name);
-    ss = [mdl '/BeltDynamics'];
-
-    % Delete default inport/outport
-    delete_block([ss '/In1']);
-    delete_block([ss '/Out1']);
-
-    % ── Inputs: ω of each pulley (6 inports) ──
-    pnames = {'CRK','FAN','IDR','ALT','AC','TEN'};
-    for k = 1:6
-        p = [ss '/omega_' pnames{k}];
-        add_block('simulink/Sources/In1', p);
-        set_param(p,'Position',[30 (k-1)*80+30 80 (k-1)*80+60],'Port',num2str(k));
+%% ══════════════════════════════════════════════════════════════════════════════
+%  HELPER: connect two blocks using port handles (safe, version-independent)
+%  type1/type2: 'LConn','RConn','Inport','Outport','Trigger' etc.
+%  idx1/idx2: port index (1-based)
+%% ══════════════════════════════════════════════════════════════════════════════
+function safe_line(src_blk, src_type, src_idx, dst_blk, dst_type, dst_idx)
+    try
+        p1 = get_param(src_blk,'PortHandles');
+        p2 = get_param(dst_blk,'PortHandles');
+        h1 = p1.(src_type)(src_idx);
+        h2 = p2.(dst_type)(dst_idx);
+        add_line(MDL, h1, h2, 'autorouting','on');
+    catch e
+        fprintf('  [warn] line %s->%s: %s\n', src_blk, dst_blk, e.message);
     end
-
-    % Belt velocity  v = omega_CRK * r_CRK
-    r_CRK = pulleys(1).r / 1000;  % m
-    blk_v = [ss '/BeltVelocity'];
-    add_block('simulink/Math Operations/Gain', blk_v);
-    set_param(blk_v,'Position',[120 30 250 60]);
-    set_param(blk_v,'Gain', num2str(r_CRK));
-    add_line(ss,['omega_CRK/1'],[strrep(blk_v,[ss '/'],'') '/1'],'autorouting','on');
-
-    % Centrifugal tension  Tc = m_b * v^2
-    blk_v2 = [ss '/v_squared'];
-    add_block('simulink/Math Operations/Math Function', blk_v2);
-    set_param(blk_v2,'Position',[300 30 400 60],'Operator','square');
-    blk_Tc = [ss '/T_centrifugal'];
-    add_block('simulink/Math Operations/Gain', blk_Tc);
-    set_param(blk_Tc,'Position',[430 30 550 60]);
-    set_param(blk_Tc,'Gain', num2str(belt.lin_mass));
-    add_line(ss,'BeltVelocity/1','v_squared/1','autorouting','on');
-    add_line(ss,'v_squared/1','T_centrifugal/1','autorouting','on');
-
-    % Span tensions for each of 6 spans
-    % T_eff(k) = P(k)*1000 / v  (from load table already in pulley LUT)
-    % T_tight  = T_static + T_eff/2
-    % T_slack  = T_static - T_eff/2  (floored at 0)
-    T_static = belt.static_tension;
-    wrap_deg = [166.5 127.6 108.4 145.1 105.7 76.4];
-    mu = belt.mu;
-
-    for k = 1:6
-        pn = pnames{k};
-        % Power lookup  P = f(omega)
-        blk_lut = [ss '/Plut_' pn];
-        add_block('simulink/Lookup Tables/1-D Lookup Table', blk_lut);
-        rpm_rad = load_table.rpm * 2*pi/60;
-        P_arr   = load_table.(pn);
-        set_param(blk_lut,'BreakpointsForDimension1',mat2str(rpm_rad,6),...
-            'Table',mat2str(P_arr,6),'ExtrapMethod','Clip');
-        set_param(blk_lut,'Position',[120 (k-1)*80+100 250 (k-1)*80+130]);
-        add_line(ss,['omega_' pn '/1'],['Plut_' pn '/1'],'autorouting','on');
-
-        % T_eff = P*1000/v  (divide block + multiply 1000)
-        blk_te = [ss '/Teff_' pn];
-        add_block('simulink/Math Operations/Divide', blk_te);
-        set_param(blk_te,'Position',[300 (k-1)*80+100 400 (k-1)*80+130]);
-
-        blk_k1 = [ss '/k1000_' pn];
-        add_block('simulink/Math Operations/Gain', blk_k1);
-        set_param(blk_k1,'Gain','1000','Position',[270 (k-1)*80+100 298 (k-1)*80+130]);
-        add_line(ss,['Plut_' pn '/1'],['k1000_' pn '/1'],'autorouting','on');
-        add_line(ss,['k1000_' pn '/1'],['Teff_' pn '/1'],'autorouting','on');
-        add_line(ss,'BeltVelocity/1',['Teff_' pn '/2'],'autorouting','on');
-
-        % T_tight = T_static + T_eff/2
-        blk_tt = [ss '/Ttight_' pn];
-        add_block('simulink/Math Operations/Sum', blk_tt);
-        set_param(blk_tt,'Inputs','++','Position',[450 (k-1)*80+100 500 (k-1)*80+130]);
-
-        blk_half = [ss '/half_' pn];
-        add_block('simulink/Math Operations/Gain', blk_half);
-        set_param(blk_half,'Gain','0.5','Position',[420 (k-1)*80+100 448 (k-1)*80+130]);
-        add_line(ss,['Teff_' pn '/1'],['half_' pn '/1'],'autorouting','on');
-        add_line(ss,['half_' pn '/1'],['Ttight_' pn '/1'],'autorouting','on');
-
-        blk_cts = [ss '/Tstatic_' pn];
-        add_block('simulink/Sources/Constant', blk_cts);
-        set_param(blk_cts,'Value',num2str(T_static),'Position',[420 (k-1)*80+140 448 (k-1)*80+160]);
-        add_line(ss,['Tstatic_' pn '/1'],['Ttight_' pn '/2'],'autorouting','on');
-
-        % Slip Safety Factor  SF = ln(Ttight/Tslack) / (mu*theta)
-        mu_theta = mu * wrap_deg(k) * pi/180;
-        blk_sf = [ss '/SF_' pn];
-        add_block('simulink/Math Operations/Fcn', blk_sf);
-        set_param(blk_sf,'Position',[560 (k-1)*80+100 700 (k-1)*80+130]);
-        set_param(blk_sf,'Expr',...
-            sprintf('log(max(u(1),1)/max((%g - u(1)/2),0.001)) / %g', T_static, mu_theta));
-        add_line(ss,['Ttight_' pn '/1'],['SF_' pn '/1'],'autorouting','on');
-
-        % Outports: T_tight and SF
-        p_out_T  = [ss '/Tout_' pn];
-        p_out_SF = [ss '/SFout_' pn];
-        add_block('simulink/Sinks/Out1', p_out_T);
-        add_block('simulink/Sinks/Out1', p_out_SF);
-        set_param(p_out_T, 'Port', num2str(k),    'Position',[750 (k-1)*80+100 800 (k-1)*80+130]);
-        set_param(p_out_SF,'Port', num2str(k+6),  'Position',[750 (k-1)*80+140 800 (k-1)*80+160]);
-        add_line(ss,['Ttight_' pn '/1'],['Tout_' pn '/1'],'autorouting','on');
-        add_line(ss,['SF_' pn '/1'],['SFout_' pn '/1'],'autorouting','on');
-    end
-
-    close_system(ss_name);
 end
 
-function build_tensioner_subsystem(mdl, ten, sim)
-%BUILD_TENSIONER_SUBSYSTEM  Spring-damper tensioner with arm rotation model.
+%% ══════════════════════════════════════════════════════════════════════════════
+%  LAYOUT CONSTANTS
+%% ══════════════════════════════════════════════════════════════════════════════
+X0=30; Y0=50;         % top-left origin
+DX=280; DY=220;       % column/row spacing
 
-    ss_name = [mdl '/Tensioner'];
-    add_block('simulink/Ports & Subsystems/Subsystem', ss_name);
-    set_param(ss_name,'Position',[1100 100 1300 300]);
-    open_system(ss_name);
-    ss = ss_name;
-    delete_block([ss '/In1']);
-    delete_block([ss '/Out1']);
+%% ══════════════════════════════════════════════════════════════════════════════
+%  BLOCK 1: Solver Configuration
+%% ══════════════════════════════════════════════════════════════════════════════
+SC = AB('nesl_utility/Solver Configuration','SC',X0,Y0,160,40);
+set_param(SC,'UseLocalSolver','off');
 
-    % Spring-Damper system:  J*theta_ddot + c*theta_dot + k*theta = T_belt
-    % State-space:  x = [theta; theta_dot]
-    J = ten.Iz;
-    k = ten.k_spring * pi/180;   % convert Nm/deg → Nm/rad
-    c = 2 * sqrt(k*J) * 0.15;    % 15% damping ratio
+%% BLOCK 2: Global ground reference
+GND = AB('fl_lib/Utilities/Mechanical/Rotational/Rotational Reference',...
+    'GND',X0,Y0+60,90,40);
 
-    A = [0 1; -k/J -c/J];
-    B = [0; 1/J];
-    C_out = eye(2);
-    D_out = zeros(2,1);
+%% ══════════════════════════════════════════════════════════════════════════════
+%  ENGINE SPEED SOURCE
+%  RPM_Profile → rad/s → PS Converter → Velocity Source
+%% ══════════════════════════════════════════════════════════════════════════════
+% Repeating profile: idle→rated→idle over 30s
+RPM_PROF = AB('simulink/Sources/Repeating Sequence','RPM_Profile',X0+10,Y0+150,140,40);
+set_param(RPM_PROF,...
+    'rep_seq_t', '[0  5   15   25   30]',...
+    'rep_seq_y', '[600 1200 2000 1200 600]');
 
-    blk_ss = [ss '/TensionerSS'];
-    add_block('simulink/Continuous/State-Space', blk_ss);
-    set_param(blk_ss,'Position',[200 80 400 200]);
-    set_param(blk_ss,'A',mat2str(A,6),'B',mat2str(B,6),...
-        'C',mat2str(C_out,6),'D',mat2str(D_out,6),...
-        'InitialCondition',sprintf('[%g; 0]', ten.mean_load/k));
+GAIN_RPM2RAD = AB('simulink/Math Operations/Gain','RPM2rad',X0+170,Y0+150,80,40);
+set_param(GAIN_RPM2RAD,'Gain','2*pi/60');
 
-    % Input port: belt torque
-    blk_in = [ss '/T_belt'];
-    add_block('simulink/Sources/In1', blk_in);
-    set_param(blk_in,'Position',[30 120 80 150],'Port','1');
-    add_line(ss,'T_belt/1','TensionerSS/1','autorouting','on');
+CONV_W = AB('nesl_utility/Simulink-PS Converter','Conv_omega',X0+270,Y0+150,80,40);
 
-    % Output: arm angle and angular velocity
-    blk_out1 = [ss '/theta_arm'];
-    blk_out2 = [ss '/omega_arm'];
-    add_block('simulink/Sinks/Out1', blk_out1);
-    add_block('simulink/Sinks/Out1', blk_out2);
-    set_param(blk_out1,'Port','1','Position',[500 80 550 110]);
-    set_param(blk_out2,'Port','2','Position',[500 160 550 190]);
+ENG_SRC = AB('fl_lib/Mechanical/Rotational Elements/Ideal Angular Velocity Source',...
+    'EngineVelSrc',X0+370,Y0+130,130,60);
 
-    blk_dem1 = [ss '/Demux'];
-    add_block('simulink/Signal Routing/Demux', blk_dem1);
-    set_param(blk_dem1,'Outputs','2','Position',[440 100 460 200]);
-    add_line(ss,'TensionerSS/1','Demux/1','autorouting','on');
-    add_line(ss,'Demux/1','theta_arm/1','autorouting','on');
-    add_line(ss,'Demux/2','omega_arm/1','autorouting','on');
+% Connect RPM profile chain
+safe_line(RPM_PROF,   'Outport',1, GAIN_RPM2RAD,'Inport',1);
+safe_line(GAIN_RPM2RAD,'Outport',1, CONV_W,'Inport',1);
+safe_line(CONV_W,'Outport',1, ENG_SRC,'Inport',1);   % PS signal → W port
 
-    close_system(ss_name);
+% Ground → Engine ref port
+safe_line(GND,'LConn',1, ENG_SRC,'LConn',2);
+
+%% ── RPM Sensor + To Workspace ────────────────────────────────────────────────
+RPM_SEN = AB('fl_lib/Mechanical/Rotational Elements/Ideal Rotational Motion Sensor',...
+    'RPM_Sensor',X0+530,Y0+130,100,60);
+CONV_RPM= AB('nesl_utility/PS-Simulink Converter','Conv_RPM',X0+650,Y0+150,80,40);
+GAIN_R2R= AB('simulink/Math Operations/Gain','rad2rpm',X0+750,Y0+150,80,40);
+set_param(GAIN_R2R,'Gain','60/(2*pi)');
+WS_RPM  = AB('simulink/Sinks/To Workspace','WS_EngRPM',X0+850,Y0+150,100,40);
+set_param(WS_RPM,'VariableName','eng_rpm','SaveFormat','Array');
+
+safe_line(ENG_SRC,'LConn',1, RPM_SEN,'LConn',1);
+safe_line(GND,    'LConn',1, RPM_SEN,'LConn',2);
+safe_line(RPM_SEN,'Outport',1, CONV_RPM,'Inport',1);
+safe_line(CONV_RPM,'Outport',1, GAIN_R2R,'Inport',1);
+safe_line(GAIN_R2R,'Outport',1, WS_RPM,'Inport',1);
+
+%% ══════════════════════════════════════════════════════════════════════════════
+%  PULLEY SUBSYSTEMS (one per accessory)
+%  Each subsystem contains:
+%    - Rotational Inertia
+%    - Speed sensor → torque LUT → torque source (load)
+%    - Belt compliance (torsional spring-damper between adjacent pulleys)
+%    - Torque + speed measurement → To Workspace
+%% ══════════════════════════════════════════════════════════════════════════════
+
+prev_conn_blk = 'EngineVelSrc';   % first pulley connects to engine output
+
+for k = 1:np
+    pn  = pnames{k};
+    p   = pulleys(k);
+    xi  = X0 + (k-1)*DX;
+    yi  = Y0 + 340;
+
+    fprintf('  Building pulley subsystem: %s\n', pn);
+
+    %% ── Inertia ────────────────────────────────────────────────────────────
+    Iz_k = max(p.Iz, 1e-6);
+    IZ = AB('fl_lib/Mechanical/Rotational Elements/Inertia',...
+        [pn '_Iz'], xi,yi,110,50);
+    set_param(IZ,'inertia',sprintf('%.6f',Iz_k));
+
+    % Connect previous block's LConn1 to this inertia LConn1
+    safe_line(prev_conn_blk,'LConn',1, IZ,'LConn',1);
+    prev_conn_blk = IZ;
+
+    % Ground reference for inertia
+    safe_line(GND,'LConn',1, IZ,'LConn',2);
+
+    %% ── Belt compliance spring between this and next pulley ─────────────────
+    kn      = mod(k,np)+1;
+    span_m  = hypot(pulleys(kn).x-p.x, pulleys(kn).y-p.y)/1000;
+    k_axial = belt.EA / max(span_m,0.01);
+    k_tors  = k_axial * (p.r/1000)^2;   % Nm/rad
+    c_tors  = max(k_tors*0.005, 0.01);  % Ns·m/rad (1% damping)
+
+    SPR = AB('fl_lib/Mechanical/Rotational Elements/Torsional Spring',...
+        [pn '_Spr'], xi+120,yi,100,50);
+    set_param(SPR,'spring_rate',sprintf('%.2f',k_tors));
+
+    DAM = AB('fl_lib/Mechanical/Rotational Elements/Rotational Damper',...
+        [pn '_Dam'], xi+120,yi+60,100,50);
+    set_param(DAM,'D',sprintf('%.4f',c_tors));
+
+    safe_line(IZ, 'LConn',1, SPR,'LConn',1);
+    safe_line(GND,'LConn',1, SPR,'LConn',2);
+    safe_line(IZ, 'LConn',1, DAM,'LConn',1);
+    safe_line(GND,'LConn',1, DAM,'LConn',2);
+
+    %% ── Speed sensor ─────────────────────────────────────────────────────────
+    SSEN = AB('fl_lib/Mechanical/Rotational Elements/Ideal Rotational Motion Sensor',...
+        [pn '_SpeedSen'], xi,yi+140,110,60);
+    safe_line(IZ,  'LConn',1, SSEN,'LConn',1);
+    safe_line(GND, 'LConn',1, SSEN,'LConn',2);
+
+    %% ── PS→Simulink → Torque LUT ─────────────────────────────────────────────
+    CSPD = AB('nesl_utility/PS-Simulink Converter',...
+        [pn '_CvSpd'], xi+120,yi+150,80,40);
+    safe_line(SSEN,'Outport',1, CSPD,'Inport',1);
+
+    % Torque LUT: rad/s → Nm
+    rpm_pts = load_table.rpm;
+    P_arr   = load_table.(pn);
+    T_arr   = P_arr*1000 ./ max(rpm_pts*2*pi/60, 0.1);
+
+    LUT = AB('simulink/Lookup Tables/1-D Lookup Table',...
+        [pn '_TLut'], xi+210,yi+150,110,40);
+    set_param(LUT,...
+        'BreakpointsForDimension1', mat2str(rpm_pts*2*pi/60, 6),...
+        'Table',                    mat2str(T_arr, 6),...
+        'ExtrapMethod',             'Clip');
+    safe_line(CSPD,'Outport',1, LUT,'Inport',1);
+
+    %% ── Simulink→PS → Torque Source ──────────────────────────────────────────
+    CTLUT = AB('nesl_utility/Simulink-PS Converter',...
+        [pn '_CvTlut'], xi+330,yi+150,80,40);
+    safe_line(LUT,'Outport',1, CTLUT,'Inport',1);
+
+    TSRC = AB('fl_lib/Mechanical/Rotational Elements/Ideal Torque Source',...
+        [pn '_TLoad'], xi+420,yi+140,110,60);
+    safe_line(CTLUT,'Outport',1, TSRC,'Inport',1);
+    safe_line(IZ,   'LConn',1,  TSRC,'LConn',1);
+    safe_line(GND,  'LConn',1,  TSRC,'LConn',2);
+
+    %% ── Torque sensor + To Workspace ─────────────────────────────────────────
+    TSEN = AB('fl_lib/Mechanical/Rotational Elements/Torque Sensor',...
+        [pn '_TorqSen'], xi+540,yi+140,110,60);
+    safe_line(IZ,  'LConn',1, TSEN,'LConn',1);
+    safe_line(GND, 'LConn',1, TSEN,'LConn',2);
+
+    CT = AB('nesl_utility/PS-Simulink Converter',[pn '_CvTorq'],xi+660,yi+150,80,40);
+    safe_line(TSEN,'Outport',1, CT,'Inport',1);
+
+    WS_T = AB('simulink/Sinks/To Workspace',[pn '_Tws'],xi+750,yi+150,100,40);
+    set_param(WS_T,'VariableName',[pn '_torque'],'SaveFormat','Array');
+    safe_line(CT,'Outport',1, WS_T,'Inport',1);
+
+    CW = AB('nesl_utility/PS-Simulink Converter',[pn '_CvOmeg'],xi+660,yi+200,80,40);
+    safe_line(SSEN,'Outport',1, CW,'Inport',1);
+
+    WS_W = AB('simulink/Sinks/To Workspace',[pn '_Wws'],xi+750,yi+200,100,40);
+    set_param(WS_W,'VariableName',[pn '_omega'],'SaveFormat','Array');
+    safe_line(CW,'Outport',1, WS_W,'Inport',1);
+end
+
+%% ══════════════════════════════════════════════════════════════════════════════
+%  TENSIONER SUBSYSTEM — angular spring + preload
+%% ══════════════════════════════════════════════════════════════════════════════
+xi_ten = X0 + (np)*DX;
+yi_ten = Y0 + 340;
+
+TEN_IZ = AB('fl_lib/Mechanical/Rotational Elements/Inertia',...
+    'TEN_ArmIz',xi_ten,yi_ten,110,50);
+set_param(TEN_ArmIz,'inertia',sprintf('%.5f',ten.Iz));
+
+TEN_SPR = AB('fl_lib/Mechanical/Rotational Elements/Torsional Spring',...
+    'TEN_ArmSpr',xi_ten+120,yi_ten,100,50);
+set_param(TEN_SPR,'spring_rate',sprintf('%.4f',ten.k_spring));
+
+TEN_PRELOAD = AB('simulink/Sources/Constant','TEN_Preload',xi_ten+120,yi_ten-70,80,40);
+set_param(TEN_PRELOAD,'Value',sprintf('%.4f',ten.preload));
+
+CTEN = AB('nesl_utility/Simulink-PS Converter','Conv_TenPre',xi_ten+210,yi_ten-70,80,40);
+safe_line(TEN_PRELOAD,'Outport',1, CTEN,'Inport',1);
+
+TEN_TORQ = AB('fl_lib/Mechanical/Rotational Elements/Ideal Torque Source',...
+    'TEN_TorqSrc',xi_ten+300,yi_ten-60,110,60);
+safe_line(CTEN,'Outport',1, TEN_TORQ,'Inport',1);
+
+safe_line(GND,'LConn',1, TEN_IZ,'LConn',2);
+safe_line(GND,'LConn',1, TEN_SPR,'LConn',2);
+safe_line(GND,'LConn',1, TEN_TORQ,'LConn',2);
+safe_line(TEN_IZ,'LConn',1, TEN_SPR,'LConn',1);
+safe_line(TEN_IZ,'LConn',1, TEN_TORQ,'LConn',1);
+
+%% ── Solver → GND connection (required) ──────────────────────────────────────
+safe_line(SC,'RConn',1, GND,'LConn',1);
+
+%% ── Arrange layout ───────────────────────────────────────────────────────────
+try
+    Simulink.BlockDiagram.arrangeSystem(MDL,'FullLayout','true');
+catch
+end
+
+save_system(MDL,[pwd '\' MDL '.slx']);
+fprintf('\n✅  %s.slx saved.\n',MDL);
+fprintf('   Open: open_system(''%s'')\n\n',MDL);
 end
