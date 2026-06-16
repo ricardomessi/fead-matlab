@@ -7,7 +7,9 @@
 
 function build_truck_model()
 
-if ~exist('engine','var'), FEAD_params; end
+if ~evalin('base','exist(''engine'',''var'')')
+    evalin('base','FEAD_params');
+end
 
 MDL = 'H6_Truck_System';
 fprintf('\n=== Building %s.slx ===\n', MDL);
@@ -72,8 +74,6 @@ end
 %  Outputs: throttle [0,1], brake [0,1]
 %% ══════════════════════════════════════════════════════════════════════════════
 SS_DRV = AB('simulink/Ports & Subsystems/Subsystem','Driver',50,50,160,80);
-delete_line(MDL, get_param([MDL '/Driver'],'LineHandles').Inport);
-delete_line(MDL, get_param([MDL '/Driver'],'LineHandles').Outport);
 Simulink.SubSystem.deleteContents([MDL '/Driver']);
 
 % Build driver internals
@@ -83,13 +83,11 @@ add_block('simulink/Ports & Subsystems/In1',  [D 'v_veh'],  'Position',[30 130 6
 add_block('simulink/Math Operations/Sum',      [D 'Err'],    'Position',[120 80 150 140],'Inputs','+-');
 add_block('simulink/Continuous/PID Controller',[D 'PID'],   'Position',[200 75 300 145]);
 set_param([D 'PID'],'P','800','I','120','D','30','N','50','InitialConditionSource','internal');
-add_block('simulink/Math Operations/Gain',     [D 'Thr_gain'],[D 'Thr_gain' ' DELETED'], 'Position',[340 65 420 95]);
-add_block('simulink/Math Operations/Gain',     [D 'Brk_gain'],[D 'Brk_gain' ' DELETED'], 'Position',[340 125 420 155]);
 
 % Clamp throttle/brake 0-1
-add_block('simulink/Signal Routing/Saturation',[D 'Thr_sat'], 'Position',[440 65 510 95]);
+add_block('simulink/Discontinuities/Saturation',[D 'Thr_sat'], 'Position',[440 65 510 95]);
 set_param([D 'Thr_sat'],'UpperLimit','1','LowerLimit','0');
-add_block('simulink/Signal Routing/Saturation',[D 'Brk_sat'], 'Position',[440 125 510 155]);
+add_block('simulink/Discontinuities/Saturation',[D 'Brk_sat'], 'Position',[440 125 510 155]);
 set_param([D 'Brk_sat'],'UpperLimit','1','LowerLimit','0');
 add_block('simulink/Ports & Subsystems/Out1',  [D 'throttle'],'Position',[550 65 580 85],'Port','1');
 add_block('simulink/Ports & Subsystems/Out1',  [D 'brake'],   'Position',[550 125 580 145],'Port','2');
@@ -120,8 +118,8 @@ add_block('simulink/Math Operations/Gain',           [E 'Rad2RPM'],   'Position'
 set_param([E 'Rad2RPM'],'Gain','60/(2*pi)');
 add_block('simulink/Lookup Tables/2-D Lookup Table', [E 'TorqueMap'],  'Position',[220 60  360 155]);
 set_param([E 'TorqueMap'],...
-    'RowIndex',    mat2str(engine.torque_thr),...
-    'ColumnIndex', mat2str(engine.torque_rpm),...
+    'BreakpointsForDimension1',    mat2str(engine.torque_thr),...
+    'BreakpointsForDimension2', mat2str(engine.torque_rpm),...
     'Table',       mat2str(engine.torque_map'),...
     'ExtrapMethod','Clip','InterpMethod','Linear');
 add_block('simulink/Math Operations/Sum',            [E 'Sub_fric'],  'Position',[400 80 430 140],'Inputs','+-');
@@ -175,8 +173,7 @@ add_line([MDL '/FEAD'],'SumP/1','P_fead_kW/1','autorouting','on');
 % P_kW / max(omega,0.1) → T_fead
 add_block('simulink/Math Operations/Gain',         [F 'kW2W'],    'Position',[450 55 530 85]);
 set_param([F 'kW2W'],'Gain','1000');
-add_block('simulink/Math Operations/Math Function', [F 'SafeOmeg'],'Position',[90 155 170 185]);
-set_param([F 'SafeOmeg'],'Operator','abs');
+add_block('simulink/Math Operations/Abs', [F 'SafeOmeg'],'Position',[90 155 170 185]);
 add_block('simulink/Math Operations/Sum',           [F 'OmegClamp'],'Position',[200 150 260 190],'Inputs','++');
 add_block('simulink/Sources/Constant',              [F 'MinOmeg'], 'Position',[130 200 190 230]);
 set_param([F 'MinOmeg'],'Value','0.1');
@@ -295,17 +292,14 @@ add_block('simulink/Math Operations/Abs',        [W 'AbsV'],     'Position',[100
 add_block('simulink/Sources/Constant',           [W 'MinV'],     'Position',[100 165 160 195]);
 set_param([W 'MinV'],'Value','0.01');
 add_block('simulink/Math Operations/MinMax',     [W 'MaxV'],     'Position',[200 140 260 180]);
-set_param([W 'MaxV'],'Function','max');
+set_param([W 'MaxV'],'Function','max','Inputs','2');
 add_block('simulink/Math Operations/Divide',     [W 'DivKappa'], 'Position',[300 80 360 160]);
 add_block('simulink/Discontinuities/Saturation', [W 'SatKappa'], 'Position',[400 95 460 145]);
 set_param([W 'SatKappa'],'UpperLimit','1','LowerLimit','-1');
 
 % Pacejka: Fx = Fz*D*sin(C*atan(B*kappa - E*(B*kappa - atan(B*kappa))))
-add_block('simulink/Math Operations/Gain',        [W 'GainB'],    'Position',[510 95 570 145]);
-set_param([W 'GainB'],'Gain',sprintf('%g',B));
-add_block('simulink/Math Operations/Math Function',[W 'Atan1'],   'Position',[610 95 670 145]);
-set_param([W 'Atan1'],'Operator','atan');
-add_block('simulink/Math Operations/MATLAB Fcn',  [W 'PacejkaFcn'],'Position',[720 85 880 155]);
+
+add_block('simulink/User-Defined Functions/Interpreted MATLAB Function',  [W 'PacejkaFcn'],'Position',[720 85 880 155]);
 Bv=B; Cv=C; Dv=D; Ev=E_t; Fzv=Fz_per_whl;
 set_param([W 'PacejkaFcn'],'MATLABFcn',...
     sprintf('%.4f*%.4f*sin(%.4f*atan(%.4f*u - %.4f*(%.4f*u - atan(%.4f*u))))',...
@@ -351,16 +345,16 @@ add_block('simulink/Math Operations/Gain',         [CH 'AeroK'], 'Position',[210
 set_param([CH 'AeroK'],'Gain',sprintf('%.4f',0.5*rho*Cd*A_f));
 
 % Rolling resistance: Cr*m*g*cos(grade)
-add_block('simulink/Math Operations/Trigonometry',[CH 'CosG'],   'Position',[120 195 180 225]);
-set_param([CH 'CosG'],'Operator','cos','InputSame','on');
+add_block('simulink/Math Operations/Trigonometric Function',[CH 'CosG'],   'Position',[120 195 180 225]);
+set_param([CH 'CosG'],'Operator','cos');
 add_block('simulink/Math Operations/Gain',        [CH 'DegRad'], 'Position',[80 255 120 285]);
 set_param([CH 'DegRad'],'Gain','pi/180');
 add_block('simulink/Math Operations/Gain',        [CH 'RollK'],  'Position',[210 195 290 225]);
 set_param([CH 'RollK'],'Gain',sprintf('%.4f',Cr*m*9.81));
 
 % Grade force: m*g*sin(grade)
-add_block('simulink/Math Operations/Trigonometry',[CH 'SinG'],   'Position',[120 265 180 295]);
-set_param([CH 'SinG'],'Operator','sin','InputSame','on');
+add_block('simulink/Math Operations/Trigonometric Function',[CH 'SinG'],   'Position',[120 265 180 295]);
+set_param([CH 'SinG'],'Operator','sin');
 add_block('simulink/Math Operations/Gain',        [CH 'GradeK'], 'Position',[210 265 290 295]);
 set_param([CH 'GradeK'],'Gain',sprintf('%.2f',m*9.81));
 
@@ -408,14 +402,13 @@ v_ref_v  = [0   0   20   80   80    0    0    0] / 3.6;
 grade_v  = [0   0    0    0    0    5    0    0];
 
 VREF = AB('simulink/Sources/From Workspace','v_ref_src',30,280,130,40);
-set_param(VREF,'VariableName','v_ref_ts',...
-    'ZeroOrderHold','on','Interpolate','on');
+set_param(VREF,'VariableName','v_ref_ts','Interpolate','on');
 % Create timeseries and assign to workspace
 ts_v = timeseries(v_ref_v', t_ref_v');
 assignin('base','v_ref_ts', ts_v);
 
 GRADE = AB('simulink/Sources/From Workspace','grade_src',30,340,130,40);
-set_param(GRADE,'VariableName','grade_ts','ZeroOrderHold','on');
+set_param(GRADE,'VariableName','grade_ts');
 ts_g = timeseries(grade_v', t_ref_v');
 assignin('base','grade_ts', ts_g);
 
@@ -433,19 +426,21 @@ set_param(INT_PROP,'InitialCondition','0');
 
 % Wheel EOM integrator numerics (T_wheel - Fx*R / Iz_whl)
 IZ_WHL = tyre.Iz * 4;
-GAIN_IWL= AB('simulink/Math Operations/Gain','Gain_InvIz',820,380,90,40);
-set_param(GAIN_IWL,'Gain',sprintf('%.6f',1/IZ_WHL));
+Gain_InvIz = AB('simulink/Math Operations/Gain','Gain_InvIz',820,380,90,40);
+set_param(Gain_InvIz,'Gain',sprintf('%.6f',1/IZ_WHL));
 
 IZ_ENG = engine.flywheel_Iz;
-GAIN_IEG= AB('simulink/Math Operations/Gain','Gain_InvIzEng',820,295,90,40);
-set_param(GAIN_IEG,'Gain',sprintf('%.6f',1/IZ_ENG));
+Gain_InvIzEng = AB('simulink/Math Operations/Gain','Gain_InvIzEng',820,295,90,40);
+set_param(Gain_InvIzEng,'Gain',sprintf('%.6f',1/IZ_ENG));
 
 % Wheel force × R → wheel torque reaction
-GAIN_FXR= AB('simulink/Math Operations/Gain','Gain_FxR',1200,360,90,40);
-set_param(GAIN_FXR,'Gain',sprintf('%g',R_w));
+Gain_FxR = AB('simulink/Math Operations/Gain','Gain_FxR',1200,360,90,40);
+set_param(Gain_FxR,'Gain',sprintf('%g',R_w));
 
-SUM_ENG_EOM = AB('simulink/Math Operations/Sum','Sum_EngEOM',760,280,60,80,'Inputs','++--');
-SUM_WHL_EOM = AB('simulink/Math Operations/Sum','Sum_WhlEOM',760,360,60,80,'Inputs','+-');
+Sum_EngEOM = AB('simulink/Math Operations/Sum','Sum_EngEOM',760,280,60,80);
+set_param(Sum_EngEOM,'Inputs','++--');
+Sum_WhlEOM = AB('simulink/Math Operations/Sum','Sum_WhlEOM',760,360,60,80);
+set_param(Sum_WhlEOM,'Inputs','+-');
 
 % Scopes & To Workspace outputs
 WS_VEH = AB('simulink/Sinks/To Workspace','WS_v_veh', 1400,240,110,40);
@@ -459,8 +454,8 @@ SCOPE  = AB('simulink/Sinks/Scope','Main_Scope',1400,400,120,60);
 set_param(SCOPE,'NumInputPorts','4');
 
 % Top-level gain for RPM display
-GAIN_RPM3 = AB('simulink/Math Operations/Gain','Gain_RadRPM',950,280,90,40);
-set_param(GAIN_RPM3,'Gain','60/(2*pi)');
+Gain_RadRPM = AB('simulink/Math Operations/Gain','Gain_RadRPM',950,280,90,40);
+set_param(Gain_RadRPM,'Gain','60/(2*pi)');
 
 % --- Connect top-level using port handles ---
 % v_ref → Driver input 1

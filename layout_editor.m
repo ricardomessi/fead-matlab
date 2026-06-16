@@ -1,3 +1,4 @@
+function layout_editor()
 %% layout_editor.m  –  Interactive MATLAB GUI for FEAD Pulley Layout Editor
 %  Drag-and-drop pulley positions, edit radius/coordinates numerically,
 %  view live hub-load vectors and belt spans. Updates workspace variables.
@@ -5,7 +6,14 @@
 %  Usage:  >> FEAD_params; layout_editor
 % ─────────────────────────────────────────────────────────────────────────────
 
-if ~exist('pulleys','var'), FEAD_params; end
+if ~evalin('base','exist(''pulleys'',''var'')')
+    evalin('base','FEAD_params');
+end
+pulleys    = evalin('base','pulleys');
+belt       = evalin('base','belt');
+load_table = evalin('base','load_table');
+wp         = evalin('base','wp');
+N_pulleys  = numel(pulleys);
 
 %% ── Create figure ──────────────────────────────────────────────────────────
 fig = uifigure('Name','FEAD Layout Editor – Ashok Leyland H6',...
@@ -49,54 +57,54 @@ pnames  = {'CRK','FAN','IDR','ALT','AC','TEN'};
 ef_x = cell(N_pulleys,1); ef_y = cell(N_pulleys,1);
 ef_r = cell(N_pulleys,1); ef_sr = cell(N_pulleys,1);
 
-for k = 1:N_pulleys
-    y_row = y0_hdr - k*52;
+for k_init = 1:N_pulleys
+    y_row = y0_hdr - k_init*52;
     x0 = 10;
-    hex = pcolors{k};
+    hex = pcolors{k_init};
     rgb = hex2rgb(hex);
 
     % Name label (colored)
-    uilabel(pnl,'Text',pnames{k},...
+    uilabel(pnl,'Text',pnames{k_init},...
         'Position',[x0 y_row col_w(1) 30],...
         'FontWeight','bold','FontColor',rgb,'FontSize',12);
     x0 = x0 + col_w(1) + 4;
 
     % X edit field
-    ef_x{k} = uieditfield(pnl,'numeric',...
-        'Value',pulleys(k).x,'Limits',[-600 600],...
+    ef_x{k_init} = uieditfield(pnl,'numeric',...
+        'Value',pulleys(k_init).x,'Limits',[-600 600],...
         'Position',[x0 y_row col_w(2) 30],...
         'BackgroundColor',[0.06 0.10 0.18],'FontColor',[0.89 0.91 0.94],'FontSize',10);
     x0 = x0 + col_w(2) + 4;
 
     % Y edit field
-    ef_y{k} = uieditfield(pnl,'numeric',...
-        'Value',pulleys(k).y,'Limits',[-100 700],...
+    ef_y{k_init} = uieditfield(pnl,'numeric',...
+        'Value',pulleys(k_init).y,'Limits',[-100 700],...
         'Position',[x0 y_row col_w(3) 30],...
         'BackgroundColor',[0.06 0.10 0.18],'FontColor',[0.89 0.91 0.94],'FontSize',10);
     x0 = x0 + col_w(3) + 4;
 
     % R edit field
-    ef_r{k} = uieditfield(pnl,'numeric',...
-        'Value',pulleys(k).r,'Limits',[10 150],...
+    ef_r{k_init} = uieditfield(pnl,'numeric',...
+        'Value',pulleys(k_init).r,'Limits',[10 150],...
         'Position',[x0 y_row col_w(4) 30],...
         'BackgroundColor',[0.06 0.10 0.18],'FontColor',[0.89 0.91 0.94],'FontSize',10);
     x0 = x0 + col_w(4) + 4;
 
     % SR (read-only)
-    uilabel(pnl,'Text',num2str(pulleys(k).sr,'%.3f'),...
+    uilabel(pnl,'Text',num2str(pulleys(k_init).sr,'%.3f'),...
         'Position',[x0 y_row col_w(5) 30],...
         'FontColor',[0.55 0.60 0.70],'FontSize',10);
     x0 = x0 + col_w(5) + 4;
 
     % CW/CCW label
-    uilabel(pnl,'Text',ternary(pulleys(k).cw,'CW','CCW'),...
+    uilabel(pnl,'Text',ternary(pulleys(k_init).cw,'CW','CCW'),...
         'Position',[x0 y_row col_w(6) 30],...
-        'FontColor',ternary(pulleys(k).cw,[0.20 0.90 0.65],[0.96 0.35 0.45]),'FontSize',10);
+        'FontColor',ternary(pulleys(k_init).cw,[0.20 0.90 0.65],[0.96 0.35 0.45]),'FontSize',10);
 
     % Wire callbacks (value changed → recompute + redraw)
-    ef_x{k}.ValueChangedFcn = @(src,evt) on_coord_change(k,'x',src.Value);
-    ef_y{k}.ValueChangedFcn = @(src,evt) on_coord_change(k,'y',src.Value);
-    ef_r{k}.ValueChangedFcn = @(src,evt) on_coord_change(k,'r',src.Value);
+    ef_x{k_init}.ValueChangedFcn = make_coord_callback(@on_coord_change, k_init, 'x');
+    ef_y{k_init}.ValueChangedFcn = make_coord_callback(@on_coord_change, k_init, 'y');
+    ef_r{k_init}.ValueChangedFcn = make_coord_callback(@on_coord_change, k_init, 'r');
 end
 
 %% ── Bottom bar: results ────────────────────────────────────────────────────
@@ -125,12 +133,12 @@ ten_label  = uilabel(result_pnl,'Text','480 N','Position',[1015 135 100 24],...
 
 % Results labels (hub forces)
 res_labels = cell(N_pulleys,1);
-for k = 1:N_pulleys
-    hex = pcolors{k};
+for k_init = 1:N_pulleys
+    hex = pcolors{k_init};
     rgb = hex2rgb(hex);
-    res_labels{k} = uilabel(result_pnl,...
-        'Text',sprintf('%s: F=— N  Dir=—°',pnames{k}),...
-        'Position',[(k-1)*210+10 90 200 28],...
+    res_labels{k_init} = uilabel(result_pnl,...
+        'Text',sprintf('%s: F=— N  Dir=—°',pnames{k_init}),...
+        'Position',[(k_init-1)*210+10 90 200 28],...
         'FontColor',rgb,'FontWeight','bold','FontSize',10);
 end
 
@@ -351,7 +359,8 @@ set(fig,'WindowButtonUpFcn',    @on_mouse_up);
     end
 
     function reset_to_defaults()
-        FEAD_params;
+        evalin('base','FEAD_params');
+        pulleys = evalin('base','pulleys');
         for k = 1:N_pulleys
             ef_x{k}.Value = pulleys(k).x;
             ef_y{k}.Value = pulleys(k).y;
@@ -375,4 +384,8 @@ end
 
 function out = ternary(cond, a, b)
     if cond, out = a; else, out = b; end
+end
+
+function cb = make_coord_callback(cb_fun, k, coord)
+    cb = @(src,evt) cb_fun(k, coord, src.Value);
 end

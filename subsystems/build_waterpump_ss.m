@@ -98,7 +98,7 @@ add_block('fl_lib/Mechanical/Rotational Elements/Inertia',[mdl_wp '/WP_Inertia']
 set_param([mdl_wp '/WP_Inertia'],'inertia',num2str(Iz_wp),'Position',[200 200 350 260]);
 
 %% ── Gear (speed multiplier) represented as ideal gear ────────────────────────
-add_block('fl_lib/Mechanical/Rotational Elements/Ideal Torque Source',[mdl_wp '/GearInput']);
+add_block('fl_lib/Mechanical/Mechanical Sources/Ideal Torque Source',[mdl_wp '/GearInput']);
 set_param([mdl_wp '/GearInput'],'Position',[200 300 350 360]);
 
 %% ── Pump Load Torque (lookup: WP RPM → torque) ───────────────────────────────
@@ -110,7 +110,7 @@ set_param([mdl_wp '/PumpTorque_LUT'],...
     'ExtrapMethod','Clip','Position',[500 200 680 250]);
 
 %% ── Speed sensor ─────────────────────────────────────────────────────────────
-add_block('fl_lib/Mechanical/Rotational Elements/Ideal Rotational Motion Sensor',...
+add_block('fl_lib/Mechanical/Mechanical Sensors/Ideal Rotational Motion Sensor',...
     [mdl_wp '/WP_SpeedSensor']);
 set_param([mdl_wp '/WP_SpeedSensor'],'Position',[200 400 350 460]);
 
