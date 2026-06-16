@@ -1,712 +1,864 @@
-%% FEAD_App.m  –  FEAD Belt Drive Test Rig – Complete Interactive App
-%  Fast live results via pre-computed vectorised sweep.
-%  All physics computed analytically (no Validator loop per plot point).
+%% FEAD_App.m  –  FEAD Belt Drive Test Rig  – Complete Working App
+%  Clean single-file app. All inputs via checkboxes/dropdowns/sliders.
+%  Simulation results update instantly via vectorised physics.
 %  Usage:  >> FEAD_params;  FEAD_App
 % ─────────────────────────────────────────────────────────────────────────────
-
 function FEAD_App()
 
-%% ── Load parameters from workspace or run FEAD_params ─────────────────────
-if ~exist('pulleys','var') || ~exist('belt','var')
-    FEAD_params;
+%% ── Load parameters ─────────────────────────────────────────────────────────
+if ~evalin('base','exist(''pulleys'',''var'')')
+    evalin('base','FEAD_params');
 end
+PL0  = evalin('base','pulleys');
+BLT0 = evalin('base','belt');
+LT   = evalin('base','load_table');
+WP   = evalin('base','wp');
+TPOS = evalin('base','ten_pos');
+BLIB = FEAD_BeltLibrary();
 
-pulleys_ws = evalin('base','pulleys');
-belt_ws    = evalin('base','belt');
-lt_ws      = evalin('base','load_table');
-wp_ws      = evalin('base','wp');
-ten_ws     = evalin('base','ten_pos');
+pnames   = {'CRK','FAN','IDR','ALT','AC','TEN'};
+np       = 6;
+rpm_sw   = (300:50:2500)';
+wrap_deg = [166.5 127.6 108.4 145.1 105.7 76.4];
+pdf_F    = [2658.9 2866.4 1710.1 1678.1 985.8 608.5];
 
-belt_lib   = FEAD_BeltLibrary();
+%% ── State ───────────────────────────────────────────────────────────────────
+S.pulleys = PL0;
+S.belt    = BLIB(1);
+S.belt.static_tension = BLT0.static_tension;
+S.belt.length_m       = BLT0.length_m;
+S.belt.length_mm      = BLT0.length_m * 1000;
+S.belt.T_max          = BLIB(1).T_max;
+S.rpm     = 1200;
+S.ac_on   = true;
+S.night   = false;
+S.bas     = false;
+S.eng_brk = false;
+S.temp_C  = 40;
+S.ten_idx = 4;        % MEAN
+S.dragging= -1;
+S.running = false;
+S.dw      = [];
+S.ang     = zeros(1,np);
+S.mrk_pos = linspace(0,1,16);
+S.cache   = [];
 
-%% ── App state struct ───────────────────────────────────────────────────────
-S.pulleys   = pulleys_ws;
-S.belt      = belt_lib(1);
-S.belt.static_tension = belt_ws.static_tension;
-S.belt.length_m       = belt_ws.length_m;
-S.belt.length_mm      = belt_ws.length_m * 1000;
-S.load_table= lt_ws;
-S.wp        = wp_ws;
-S.ten_pos   = ten_ws;
-S.rpm       = 1200;
-S.ten_idx   = 4;
-S.conditions= struct('ac',true,'nightRun',false,'bas',false,'temp_C',40);
-S.dragging  = -1;
-S.running   = false;
-S.dw        = [];
-S.ang_off   = zeros(1,6);
-S.cache     = [];   % pre-computed sweep cache
-
-pnames  = {'CRK','FAN','IDR','ALT','AC','TEN'};
-np      = 6;
-rpm_sw  = (300:50:2500)';   % fixed sweep vector
-
-%% ── Colours ────────────────────────────────────────────────────────────────
-BG=[0.06 0.08 0.14]; AX=[0.09 0.12 0.20]; TC=[0.89 0.91 0.94];
-AM=[0.96 0.62 0.04]; VI=[0.65 0.54 0.98]; GR=[0.20 0.85 0.60];
+%% ── Colours ─────────────────────────────────────────────────────────────────
+BG=[0.06 0.08 0.14]; PANEL=[0.09 0.12 0.20]; TC=[0.89 0.91 0.94];
+AM=[0.96 0.62 0.04]; VI=[0.65 0.54 0.98];    GR=[0.20 0.85 0.60];
 RD=[0.94 0.27 0.27]; PK=[0.96 0.28 0.71];
 PC={AM,[0.55 0.36 0.96],VI,GR,PK,[0.38 0.64 0.98]};
 
-%% ═══ FIGURE ════════════════════════════════════════════════════════════════
-fig = uifigure('Name','FEAD Belt Drive Test Rig  –  H6 Engine',...
+%% ════════════════════════════════════════════════════════════════════════════
+%  FIGURE  1840×980
+%% ════════════════════════════════════════════════════════════════════════════
+fig = uifigure('Name','FEAD Belt Drive Test Rig  –  Ashok Leyland H6',...
     'Position',[20 30 1840 980],'Color',BG,'Resize','on',...
-    'CloseRequestFcn',@on_close);
+    'CloseRequestFcn',@cb_close);
 
-%% ═══ LEFT PANEL ════════════════════════════════════════════════════════════
-lp = uipanel(fig,'Position',[5 5 330 970],'BackgroundColor',AX,'BorderType','none');
-yc = 940;
+%% ════════════════════════════════════════════════════════════════════════════
+%  LEFT PANEL  (x:5 y:5 w:340 h:970)
+%% ════════════════════════════════════════════════════════════════════════════
+lp = uipanel(fig,'Position',[5 5 340 970],'BackgroundColor',PANEL,'BorderType','none');
 
-lbl = @(txt,clr,fz) uilabel(lp,'Text',txt,'Position',[5 yc 320 22],...
-    'FontSize',fz,'FontColor',clr,'BackgroundColor',AX,...
-    'HorizontalAlignment','center');
+y = 940;  % cursor
 
-lbl('FEAD Test Rig Controls',AM,13); yc=yc-28;
+% ── Title ─────────────────────────────────────────────────────────────────
+uilabel(lp,'Text','FEAD Test Rig Controls','Position',[5 y 330 26],...
+    'FontSize',13,'FontWeight','bold','FontColor',AM,...
+    'HorizontalAlignment','center','BackgroundColor',PANEL);
+y = y-30;
 
-% Belt selector
-lbl('── Belt Selection ──',VI,10); yc=yc-24;
-S.dd_belt = uidropdown(lp,'Position',[5 yc 320 28],...
-    'Items',{belt_lib.name},'Value',belt_lib(1).name,...
+% ══ BELT SELECTION ══════════════════════════════════════════════════════════
+uilabel(lp,'Text','─── Belt Type ───','Position',[5 y 330 20],...
+    'FontSize',10,'FontColor',VI,'BackgroundColor',PANEL,...
+    'HorizontalAlignment','center'); y=y-24;
+
+belt_names = {BLIB.name};
+S.dd_belt = uidropdown(lp,'Position',[5 y 330 28],...
+    'Items',belt_names,'Value',belt_names{1},...
     'BackgroundColor',[0.07 0.10 0.18],'FontColor',TC,...
-    'ValueChangedFcn',@(s,~)on_belt(s.Value)); yc=yc-30;
-S.lbl_binfo = uilabel(lp,'Position',[5 yc 320 18],...
-    'Text',belt_info_str(S.belt),...
-    'FontSize',9,'FontColor',[0.55 0.62 0.72],'BackgroundColor',AX);
-yc=yc-26;
+    'ValueChangedFcn',@cb_belt); y=y-24;
 
-% RPM slider
-lbl('── Engine RPM ──',VI,10); yc=yc-24;
-S.lbl_rpm=uilabel(lp,'Position',[228 yc 90 22],'Text','1200 RPM',...
-    'FontColor',AM,'FontWeight','bold','BackgroundColor',AX);
-S.sl_rpm=uislider(lp,'Position',[5 yc+9 218 3],'Limits',[400 2500],'Value',1200,...
+S.lbl_belt = uilabel(lp,'Position',[5 y 330 18],...
+    'Text',beltstr(S.belt),...
+    'FontSize',8,'FontColor',[0.55 0.62 0.72],'BackgroundColor',PANEL,...
+    'HorizontalAlignment','center'); y=y-28;
+
+% ══ ENGINE RPM ══════════════════════════════════════════════════════════════
+uilabel(lp,'Text','─── Engine RPM ───','Position',[5 y 330 20],...
+    'FontSize',10,'FontColor',VI,'BackgroundColor',PANEL,...
+    'HorizontalAlignment','center'); y=y-22;
+
+S.lbl_rpm = uilabel(lp,'Position',[235 y 95 22],'Text','1200 RPM',...
+    'FontColor',AM,'FontWeight','bold','BackgroundColor',PANEL);
+S.sl_rpm = uislider(lp,'Position',[5 y+9 222 3],...
+    'Limits',[400 2500],'Value',1200,...
     'MajorTicks',[500 1000 1500 2000 2500],...
-    'ValueChangedFcn',@(s,~)on_rpm(s.Value)); yc=yc-40;
+    'ValueChangedFcn',@cb_rpm); y=y-38;
 
-% Tension slider
-lbl('── Static Tension (N) ──',VI,10); yc=yc-24;
-S.lbl_ten=uilabel(lp,'Position',[228 yc 90 22],'Text','480 N',...
-    'FontColor',AM,'FontWeight','bold','BackgroundColor',AX);
-S.sl_ten=uislider(lp,'Position',[5 yc+9 218 3],'Limits',[100 1000],'Value',480,...
+% ══ STATIC TENSION ══════════════════════════════════════════════════════════
+uilabel(lp,'Text','─── Static Tension (N) ───','Position',[5 y 330 20],...
+    'FontSize',10,'FontColor',VI,'BackgroundColor',PANEL,...
+    'HorizontalAlignment','center'); y=y-22;
+
+S.lbl_ten = uilabel(lp,'Position',[235 y 95 22],'Text','480 N',...
+    'FontColor',AM,'FontWeight','bold','BackgroundColor',PANEL);
+S.sl_ten = uislider(lp,'Position',[5 y+9 222 3],...
+    'Limits',[100 1000],'Value',480,...
     'MajorTicks',[200 400 600 800 1000],...
-    'ValueChangedFcn',@(s,~)on_ten(s.Value)); yc=yc-40;
+    'ValueChangedFcn',@cb_tension); y=y-38;
 
-% Tensioner position
-lbl('── Tensioner Position ──',VI,10); yc=yc-24;
-S.dd_tenpos=uidropdown(lp,'Position',[5 yc 320 28],...
-    'Items',{S.ten_pos.label},'Value','MEAN',...
+% ══ TENSIONER POSITION  (checkbox-style radio group) ═══════════════════════
+uilabel(lp,'Text','─── Tensioner Position ───','Position',[5 y 330 20],...
+    'FontSize',10,'FontColor',VI,'BackgroundColor',PANEL,...
+    'HorizontalAlignment','center'); y=y-24;
+
+ten_labels = {TPOS.label};
+ten_T      = [TPOS.T];
+S.bg_ten   = uibuttongroup(lp,'Position',[5 y 330 24],...
+    'BackgroundColor',PANEL,'BorderType','none',...
+    'SelectionChangedFcn',@cb_tenpos); 
+col_w = 55;
+S.rb_ten = gobjects(6,1);
+for ti=1:6
+    S.rb_ten(ti) = uiradiobutton(S.bg_ten,...
+        'Text',ten_labels{ti},...
+        'Position',[(ti-1)*col_w 2 col_w-2 20],...
+        'FontColor',TC,'FontSize',8,'BackgroundColor',PANEL);
+end
+S.rb_ten(4).Value = true;   % default MEAN
+y = y-28;
+
+% tension readout
+S.lbl_ten2 = uilabel(lp,'Position',[5 y 330 18],...
+    'Text',sprintf('T₀ = 480 N  (MEAN position, arm=15.4mm)'),...
+    'FontSize',8,'FontColor',[0.55 0.62 0.72],...
+    'BackgroundColor',PANEL,'HorizontalAlignment','center'); y=y-26;
+
+% ══ OPERATING CONDITIONS  (checkboxes) ═════════════════════════════════════
+uilabel(lp,'Text','─── Operating Conditions ───','Position',[5 y 330 20],...
+    'FontSize',10,'FontColor',VI,'BackgroundColor',PANEL,...
+    'HorizontalAlignment','center'); y=y-24;
+
+S.cb_ac  = uicheckbox(lp,'Text','AC Compressor ON (adds AC torque load)',...
+    'Value',1,'Position',[10 y 320 22],...
+    'FontColor',TC,'BackgroundColor',PANEL,...
+    'ValueChangedFcn',@(s,~)cb_cond('ac',logical(s.Value))); y=y-26;
+S.cb_nite= uicheckbox(lp,'Text','Night Run  (Alternator at max 3.7 kW)',...
+    'Value',0,'Position',[10 y 320 22],...
+    'FontColor',TC,'BackgroundColor',PANEL,...
+    'ValueChangedFcn',@(s,~)cb_cond('night',logical(s.Value))); y=y-26;
+S.cb_bas = uicheckbox(lp,'Text','BAS mode  (Belt-Alternator-Starter +5000N)',...
+    'Value',0,'Position',[10 y 320 22],...
+    'FontColor',TC,'BackgroundColor',PANEL,...
+    'ValueChangedFcn',@(s,~)cb_cond('bas',logical(s.Value))); y=y-26;
+S.cb_ebk = uicheckbox(lp,'Text','Engine Braking  (reduce drive torque 30%)',...
+    'Value',0,'Position',[10 y 320 22],...
+    'FontColor',TC,'BackgroundColor',PANEL,...
+    'ValueChangedFcn',@(s,~)cb_cond('eng_brk',logical(s.Value))); y=y-30;
+
+uilabel(lp,'Text','Operating Temp (°C):','Position',[10 y 160 22],...
+    'FontColor',TC,'BackgroundColor',PANEL);
+S.ef_temp = uieditfield(lp,'numeric','Value',40,'Limits',[-40 150],...
+    'Position',[175 y 80 22],...
     'BackgroundColor',[0.07 0.10 0.18],'FontColor',TC,...
-    'ValueChangedFcn',@(s,~)on_tenpos(s.Value)); yc=yc-36;
+    'ValueChangedFcn',@(s,~)cb_cond('temp_C',s.Value)); y=y-34;
 
-% Operating conditions checkboxes
-lbl('── Operating Conditions ──',VI,10); yc=yc-24;
-S.cb_ac   =uicheckbox(lp,'Text','AC Compressor ON','Value',1,...
-    'Position',[10 yc 210 22],'FontColor',TC,'BackgroundColor',AX,...
-    'ValueChangedFcn',@(s,~)on_cond('ac',logical(s.Value))); yc=yc-26;
-S.cb_nite =uicheckbox(lp,'Text','Night Run (Alternator max)','Value',0,...
-    'Position',[10 yc 230 22],'FontColor',TC,'BackgroundColor',AX,...
-    'ValueChangedFcn',@(s,~)on_cond('nightRun',logical(s.Value))); yc=yc-26;
-S.cb_bas  =uicheckbox(lp,'Text','BAS (Belt-Alt-Starter) mode','Value',0,...
-    'Position',[10 yc 240 22],'FontColor',TC,'BackgroundColor',AX,...
-    'ValueChangedFcn',@(s,~)on_cond('bas',logical(s.Value))); yc=yc-28;
-uilabel(lp,'Text','Temp (°C):','Position',[10 yc 90 22],...
-    'FontColor',TC,'BackgroundColor',AX);
-S.ef_temp=uieditfield(lp,'numeric','Value',40,'Limits',[-40 150],...
-    'Position',[105 yc 80 22],...
-    'BackgroundColor',[0.07 0.10 0.18],'FontColor',TC,...
-    'ValueChangedFcn',@(s,~)on_cond('temp_C',s.Value)); yc=yc-34;
+% ══ PULLEY LAYOUT TABLE ══════════════════════════════════════════════════════
+uilabel(lp,'Text','─── Pulley Layout Datum (mm) ───','Position',[5 y 330 20],...
+    'FontSize',10,'FontColor',VI,'BackgroundColor',PANEL,...
+    'HorizontalAlignment','center'); y=y-20;
+uilabel(lp,'Text','  Pulley     X        Y        R  ',...
+    'Position',[5 y 330 16],'FontSize',8,...
+    'FontColor',[0.45 0.55 0.65],'BackgroundColor',PANEL); y=y-20;
 
-% Pulley layout table
-lbl('── Pulley Layout Datum ──',VI,10); yc=yc-20;
-uilabel(lp,'Text','  Pulley    X(mm)   Y(mm)   R(mm)',...
-    'Position',[5 yc 320 16],'FontSize',8,...
-    'FontColor',[0.45 0.55 0.65],'BackgroundColor',AX); yc=yc-20;
-S.ef_px=cell(np,1); S.ef_py=cell(np,1); S.ef_pr=cell(np,1);
+S.ef_x=cell(np,1); S.ef_y=cell(np,1); S.ef_r=cell(np,1);
 for k=1:np
     c=PC{k};
-    uilabel(lp,'Text',pnames{k},'Position',[5 yc 38 22],...
-        'FontColor',c,'FontWeight','bold','BackgroundColor',AX);
-    S.ef_px{k}=uieditfield(lp,'numeric','Value',S.pulleys(k).x,'Limits',[-600 600],...
-        'Position',[44 yc 80 22],...
+    uilabel(lp,'Text',pnames{k},'Position',[5 y 38 22],...
+        'FontColor',c,'FontWeight','bold','BackgroundColor',PANEL);
+    S.ef_x{k}=uieditfield(lp,'numeric','Value',S.pulleys(k).x,...
+        'Limits',[-600 600],'Position',[46 y 82 22],...
         'BackgroundColor',[0.07 0.10 0.18],'FontColor',TC,...
-        'ValueChangedFcn',@(s,~)on_pedit(k,'x',s.Value));
-    S.ef_py{k}=uieditfield(lp,'numeric','Value',S.pulleys(k).y,'Limits',[-100 700],...
-        'Position',[128 yc 80 22],...
+        'ValueChangedFcn',@(s,~)cb_pedit(k,'x',s.Value));
+    S.ef_y{k}=uieditfield(lp,'numeric','Value',S.pulleys(k).y,...
+        'Limits',[-100 700],'Position',[132 y 82 22],...
         'BackgroundColor',[0.07 0.10 0.18],'FontColor',TC,...
-        'ValueChangedFcn',@(s,~)on_pedit(k,'y',s.Value));
-    S.ef_pr{k}=uieditfield(lp,'numeric','Value',S.pulleys(k).r,'Limits',[10 150],...
-        'Position',[212 yc 80 22],...
+        'ValueChangedFcn',@(s,~)cb_pedit(k,'y',s.Value));
+    S.ef_r{k}=uieditfield(lp,'numeric','Value',S.pulleys(k).r,...
+        'Limits',[10 150],'Position',[218 y 82 22],...
         'BackgroundColor',[0.07 0.10 0.18],'FontColor',TC,...
-        'ValueChangedFcn',@(s,~)on_pedit(k,'r',s.Value));
-    yc=yc-24;
+        'ValueChangedFcn',@(s,~)cb_pedit(k,'r',s.Value));
+    y=y-23;
 end
-yc=yc-6;
+y=y-6;
 
-% Buttons  (2 columns × 4 rows)
-bw=155; bh=30; bg=5;
-btns = {
-    '▶ Animate',  [0.08 0.20 0.12], GR,  @toggle_anim;
-    '✔ Validate', [0.08 0.12 0.24], VI,  @do_validate;
-    '⚙ Optimise', [0.12 0.08 0.24], VI,  @do_optimise;
-    '📊 Data Win',[0.10 0.15 0.28], [0.38 0.64 0.98], @open_dw;
-    '🔧 Simscape', [0.16 0.10 0.06], AM, @do_simscape;
-    '⬆ GitHub',   [0.06 0.14 0.10], GR,  @do_github;
-    '↺ Reset',    AX,               TC,  @do_reset;
-    '⬇ Web Import',AX,              TC,  @do_import;
+% ══ DESIGN SCORE BADGE ═══════════════════════════════════════════════════════
+S.lbl_score = uilabel(lp,'Position',[5 y 330 36],...
+    'Text','Design Score:  —','FontSize',15,'FontWeight','bold',...
+    'FontColor',GR,'HorizontalAlignment','center','BackgroundColor',PANEL);
+y=y-42;
+
+% ══ BUTTONS  (2 columns) ═════════════════════════════════════════════════════
+BW=160; BH=32; BG_=5;
+BTNS = {
+    '▶  Start Animation',  [0.08 0.20 0.12], GR;
+    '✔  Validate Design',  [0.08 0.12 0.24], VI;
+    '⚙  Optimise Layout',  [0.12 0.08 0.22], VI;
+    '📊  Data Window',     [0.10 0.15 0.28], [0.38 0.64 0.98];
+    '🔧  Build Simscape',  [0.16 0.10 0.06], AM;
+    '⬆  Push GitHub',      [0.06 0.14 0.10], GR;
+    '↺  Reset Datum',      PANEL,             TC;
+    '⬇  Import Web JSON',  PANEL,             TC;
 };
-btn_handles=cell(size(btns,1),1);
-for bi=1:size(btns,1)
+CBS = {@cb_anim,@cb_validate,@cb_optimise,@cb_dw,@cb_simscape,@cb_github,@cb_reset,@cb_import};
+S.btn_anim=[];
+for bi=1:size(BTNS,1)
     col=mod(bi-1,2); row=floor((bi-1)/2);
-    xb=5+col*(bw+bg); yb=yc-row*(bh+bg);
-    btn_handles{bi}=uibutton(lp,'push','Text',btns{bi,1},...
-        'Position',[xb yb bw bh],'BackgroundColor',btns{bi,2},...
-        'FontColor',btns{bi,3},'FontWeight','bold',...
-        'ButtonPushedFcn',btns{bi,4});
+    xb=5+col*(BW+BG_); yb=y-row*(BH+BG_);
+    btn=uibutton(lp,'push','Text',BTNS{bi,1},...
+        'Position',[xb yb BW BH],'BackgroundColor',BTNS{bi,2},...
+        'FontColor',BTNS{bi,3},'FontWeight','bold',...
+        'ButtonPushedFcn',CBS{bi});
+    if bi==1, S.btn_anim=btn; end
 end
-S.btn_anim=btn_handles{1};
 
-yc = yc - 4*(bh+bg) - 10;
-S.lbl_score=uilabel(lp,'Position',[5 yc 320 34],...
-    'Text','Design Score:  —','FontSize',14,'FontWeight','bold',...
-    'FontColor',GR,'HorizontalAlignment','center','BackgroundColor',AX);
+%% ════════════════════════════════════════════════════════════════════════════
+%  CENTRE PANEL  – Animation Canvas (x:350 w:830)
+%% ════════════════════════════════════════════════════════════════════════════
+cp = uipanel(fig,'Position',[350 5 830 970],'BackgroundColor',BG,'BorderType','none');
+S.ax = uiaxes(cp,'Position',[5 145 820 820]);
+S.ax.Color=[0.05 0.08 0.12]; S.ax.XColor=TC; S.ax.YColor=TC;
+S.ax.GridColor=[0.10 0.16 0.22]; S.ax.GridAlpha=0.8;
+S.ax.XGrid='on'; S.ax.YGrid='on';
+S.ax.XLim=[-420 230]; S.ax.YLim=[-100 550];
+S.ax.Title.String='FEAD Test Rig – Live Animation';
+S.ax.Title.Color=AM;
 
-%% ═══ CENTRE: Animation Canvas ══════════════════════════════════════════════
-cp=uipanel(fig,'Position',[340 5 840 970],'BackgroundColor',BG,'BorderType','none');
-ax_anim=uiaxes(cp,'Position',[5 150 830 815]);
-ax_anim.Color=[0.05 0.08 0.12];
-ax_anim.XColor=TC; ax_anim.YColor=TC;
-ax_anim.GridColor=[0.10 0.16 0.22]; ax_anim.GridAlpha=0.8;
-ax_anim.XGrid='on'; ax_anim.YGrid='on';
-ax_anim.XLim=[-420 230]; ax_anim.YLim=[-100 550];
-
-% Per-pulley badge labels below canvas
+% Per-pulley badge labels at bottom of canvas
 for k=1:np
-    S.badge{k}=uilabel(cp,'Position',[(k-1)*138+5 10 133 32],...
-        'Text',sprintf('%s\n—  N',pnames{k}),...
+    S.badge{k}=uilabel(cp,'Position',[(k-1)*136+5 5 131 36],...
+        'Text',sprintf('%s\n—',pnames{k}),...
         'FontSize',9,'FontWeight','bold','FontColor',PC{k},...
         'BackgroundColor',[0.08 0.12 0.20],'HorizontalAlignment','center');
 end
+% Results readout strip
+S.txt_strip = uilabel(cp,'Position',[5 42 820 28],...
+    'Text','Results will appear after first computation...',...
+    'FontSize',9,'FontColor',TC,'BackgroundColor',[0.07 0.10 0.18],...
+    'HorizontalAlignment','center');
 
-%% ═══ RIGHT PANEL: 5-Tab Results ════════════════════════════════════════════
-rp=uipanel(fig,'Position',[1185 5 650 970],'BackgroundColor',BG,'BorderType','none');
-uilabel(rp,'Text','Live Results','Position',[5 940 640 24],...
+%% ════════════════════════════════════════════════════════════════════════════
+%  RIGHT PANEL – Results tabs (x:1185 w:650)
+%% ════════════════════════════════════════════════════════════════════════════
+rp = uipanel(fig,'Position',[1185 5 650 970],'BackgroundColor',BG,'BorderType','none');
+uilabel(rp,'Text','Simulation Results','Position',[5 940 640 24],...
     'FontSize',13,'FontWeight','bold','FontColor',AM,...
     'HorizontalAlignment','center','BackgroundColor',BG);
-tgr=uitabgroup(rp,'Position',[5 5 640 930]);
 
-function ax=maketab(title_str)
-    tab=uitab(tgr,'Title',title_str,'BackgroundColor',AX);
-    ax=uiaxes(tab,'Position',[5 5 625 875]);
+tgr = uitabgroup(rp,'Position',[5 5 640 930]);
+
+% Helper: create a dark axes in a tab
+function ax = newtab(title_str)
+    t=uitab(tgr,'Title',title_str,'BackgroundColor',PANEL);
+    ax=uiaxes(t,'Position',[5 5 625 875]);
     ax.Color=[0.07 0.10 0.17]; ax.XColor=TC; ax.YColor=TC;
-    ax.GridColor=[0.15 0.22 0.32]; ax.GridAlpha=0.6;
+    ax.GridColor=[0.14 0.20 0.30]; ax.GridAlpha=0.7;
     ax.XGrid='on'; ax.YGrid='on'; ax.FontSize=9;
 end
 
-S.ax_hub  = maketab('Hub Loads');
-S.ax_tens = maketab('Tensions');
-S.ax_sf   = maketab('Slip SF');
-S.ax_life = maketab('Belt Life');
+S.ax_hub  = newtab('Hub Loads');
+S.ax_tens = newtab('Tensions');
+S.ax_sf   = newtab('Slip SF');
+S.ax_life = newtab('Belt Life');
 
-tab_val=uitab(tgr,'Title','Validation','BackgroundColor',AX);
-S.ax_val =uiaxes(tab_val,'Position',[5 180 625 695]);
+% Validation tab
+tvl=uitab(tgr,'Title','Validation','BackgroundColor',PANEL);
+S.ax_val = uiaxes(tvl,'Position',[5 175 625 700]);
 S.ax_val.Color=[0.07 0.10 0.17]; S.ax_val.XColor=TC; S.ax_val.YColor=TC;
-S.tx_sug =uitextarea(tab_val,'Position',[5 5 625 170],...
+S.tx_sug  = uitextarea(tvl,'Position',[5 5 625 168],...
     'Editable','off','BackgroundColor',[0.07 0.10 0.17],'FontColor',TC,'FontSize',9);
 
-%% ── Initialise animation graphics ─────────────────────────────────────────
-S.anim = init_anim(ax_anim, S.pulleys, PC);
+% Results table tab
+tbl_tab=uitab(tgr,'Title','Results Table','BackgroundColor',PANEL);
+S.tbl = uitable(tbl_tab,'Position',[5 5 625 875],...
+    'ColumnName',{'Pulley','P (kW)','T_tight (N)','T_slack (N)','F_hub (N)','Slip SF','Life (km)','Status'},...
+    'ColumnWidth',{60 65 90 90 80 70 75 60},...
+    'RowName',[],'Data',cell(np,8),...
+    'BackgroundColor',repmat([PANEL; PANEL*1.25],3,1),...
+    'FontColor',TC,'FontSize',10);
 
-%% ── Animation timer ───────────────────────────────────────────────────────
-S.timer=timer('Name','FEAD_AppTimer','Period',1/25,'ExecutionMode','fixedRate',...
+%% ════════════════════════════════════════════════════════════════════════════
+%  ANIMATION INITIALISATION
+%% ════════════════════════════════════════════════════════════════════════════
+S.gh = init_graphics(S.ax, S.pulleys);
+
+%% ── Timer ───────────────────────────────────────────────────────────────────
+S.tmr = timer('Name','FEAD_Tmr','Period',1/25,'ExecutionMode','fixedRate',...
     'TimerFcn',@(~,~)anim_step());
 
-%% ── Mouse drag callbacks ───────────────────────────────────────────────────
-fig.WindowButtonDownFcn  =@on_mdown;
-fig.WindowButtonMotionFcn=@on_mmove;
-fig.WindowButtonUpFcn    =@on_mup;
+%% ── Mouse drag ───────────────────────────────────────────────────────────────
+fig.WindowButtonDownFcn  = @mdown;
+fig.WindowButtonMotionFcn= @mmove;
+fig.WindowButtonUpFcn    = @mup;
 
-%% ── Initial compute ───────────────────────────────────────────────────────
+%% ── First compute ────────────────────────────────────────────────────────────
 recompute();
+fprintf('FEAD App launched.\n');
 
-fprintf('FEAD App ready. Use left panel controls.\n');
+%% ════════════════════════════════════════════════════════════════════════════
+%  PHYSICS ENGINE  –  vectorised RPM sweep
+%% ════════════════════════════════════════════════════════════════════════════
+function C = phys(pl, bl, lt, ac, nite, bas, ebk)
+    nr = numel(rpm_sw);
+    Fh=zeros(np,nr); Tt=zeros(np,nr); Ts=zeros(np,nr);
+    SF=zeros(np,nr); Pk=zeros(np,nr); vb=zeros(1,nr);
 
-%% ══════════════════════════════════════════════════════════════════════════
-%  CORE PHYSICS ENGINE  (vectorised – called once per parameter change)
-%% ══════════════════════════════════════════════════════════════════════════
+    for ri=1:nr
+        rpm=rpm_sw(ri);
+        v=max(pl(1).r/1000*rpm*2*pi/60, 0.01);
+        vb(ri)=v; Tc=bl.lin_mass*v^2;
 
-function C = compute_sweep(pl, bl, lt, cond, rpm_vec)
-    % Returns struct with arrays [6 × N_rpm]:
-    %   F_hub, T_tight, T_slack, SF, P_kW, v_belt, belt_life [6×1], score, checks, suggestions
-    nr  = numel(rpm_vec);
-    npp = numel(pl);
-    wrap_d = [166.5 127.6 108.4 145.1 105.7 76.4];
-
-    F_hub   = zeros(npp,nr);
-    T_t     = zeros(npp,nr);
-    T_s     = zeros(npp,nr);
-    SF_arr  = zeros(npp,nr);
-    P_arr   = zeros(npp,nr);
-    v_arr   = zeros(1,nr);
-
-    for ri = 1:nr
-        rpm = rpm_vec(ri);
-        v   = max(pl(1).r/1000 * rpm*2*pi/60, 0.01);
-        v_arr(ri) = v;
-        T_c = bl.lin_mass * v^2;
-
-        for k = 1:npp
-            P_k = max(interp1(lt.rpm, lt.(pnames{k}), rpm,'linear','extrap'), 0);
-            if strcmp(pnames{k},'AC') && ~cond.ac,        P_k=0; end
-            if strcmp(pnames{k},'ALT') && cond.nightRun, P_k=max(P_k,3.7); end
-            if strcmp(pnames{k},'CRK') && cond.bas, v_eff=max(v,0.01); P_k=P_k+5000/v_eff/1000; end
-            P_arr(k,ri) = P_k;
-            T_eff = P_k*1000/v;
-            T_t(k,ri) = bl.static_tension + T_eff/2 + T_c;
-            T_s(k,ri) = max(bl.static_tension - T_eff/2, 0) + T_c;
-            mu_th = bl.mu * wrap_d(k)*pi/180;
-            if T_s(k,ri) > 0.1
-                SF_arr(k,ri) = min(log(T_t(k,ri)/T_s(k,ri)) / mu_th, 9.99);
+        for k=1:np
+            Pk0=max(interp1(lt.rpm,lt.(pnames{k}),rpm,'linear','extrap'),0);
+            if k==5 && ~ac,   Pk0=0;           end
+            if k==4 && nite,  Pk0=max(Pk0,3.7);end
+            if k==1 && bas,   Pk0=Pk0+5;       end  % +5kW BAS
+            if k==1 && ebk,   Pk0=Pk0*0.7;     end  % engine braking
+            Pk(k,ri)=Pk0;
+            Te=Pk0*1000/v;
+            Tt(k,ri)=bl.static_tension+Te/2+Tc;
+            Ts(k,ri)=max(bl.static_tension-Te/2,0)+Tc;
+            mu_th=bl.mu*wrap_deg(k)*pi/180;
+            if Ts(k,ri)>0.1
+                SF(k,ri)=min(log(Tt(k,ri)/Ts(k,ri))/mu_th, 9.99);
             else
-                SF_arr(k,ri) = 9.99;
+                SF(k,ri)=9.99;
             end
-            kp=mod(k-2,npp)+1; kn=mod(k,npp)+1;
-            dx_p=pl(kp).x-pl(k).x; dy_p=pl(kp).y-pl(k).y;
-            dx_n=pl(kn).x-pl(k).x; dy_n=pl(kn).y-pl(k).y;
-            Lp=max(hypot(dx_p,dy_p),1); Ln=max(hypot(dx_n,dy_n),1);
-            Fx=T_t(k,ri)*dx_p/Lp + T_s(k,ri)*dx_n/Ln;
-            Fy=T_t(k,ri)*dy_p/Lp + T_s(k,ri)*dy_n/Ln;
-            F_hub(k,ri) = hypot(Fx,Fy);
+            kp=mod(k-2,np)+1; kn=mod(k,np)+1;
+            dxp=pl(kp).x-pl(k).x; dyp=pl(kp).y-pl(k).y;
+            dxn=pl(kn).x-pl(k).x; dyn=pl(kn).y-pl(k).y;
+            Lp=max(hypot(dxp,dyp),1); Ln=max(hypot(dxn,dyn),1);
+            Fx=Tt(k,ri)*dxp/Lp+Ts(k,ri)*dxn/Ln;
+            Fy=Tt(k,ri)*dyp/Lp+Ts(k,ri)*dyn/Ln;
+            Fh(k,ri)=hypot(Fx,Fy);
         end
     end
 
-    % Belt life (WLTC weighted)
-    wltc_rpm=[900 1200 1600 2000]; ww=[.25 .25 .25 .25];
-    belt_life=zeros(npp,1);
-    for k=1:npp
+    % Belt life (WLTC 4-phase)
+    wR=[900 1200 1600 2000]; wW=[.25 .25 .25 .25];
+    life=zeros(np,1);
+    for k=1:np
         D=0;
         for wi=1:4
-            vi=max(pl(1).r/1000*wltc_rpm(wi)*2*pi/60,0.01);
-            Pi=max(interp1(lt.rpm,lt.(pnames{k}),wltc_rpm(wi),'linear','extrap'),0);
+            vi=max(pl(1).r/1000*wR(wi)*2*pi/60,0.01);
+            Pi=max(interp1(lt.rpm,lt.(pnames{k}),wR(wi),'linear','extrap'),0);
             Tti=bl.static_tension+Pi*1000/vi/2+bl.lin_mass*vi^2;
             Nfi=bl.wohler_Nref*(bl.wohler_Tref/max(Tti,1))^bl.wohler_m;
-            D=D+ww(wi)/Nfi;
+            D=D+wW(wi)/Nfi;
         end
-        belt_life(k)=min(bl.length_m/1000/max(D,1e-15),500000);
+        life(k)=min(bl.length_m/1000/max(D,1e-15),500000);
     end
 
-    % 8-check validation at sim_rpm
-    [report,score,suggestions] = FEAD_Validator(pl,bl,lt,cond,1200);
-    report.suggestions = suggestions;
-    report.belt_life_km= belt_life;
+    % 8-check validation at 1200 RPM
+    cond_s=struct('ac',ac,'nightRun',nite,'bas',bas,'temp_C',S.temp_C);
+    try
+        [rpt,scr,sug]=FEAD_Validator(pl,bl,lt,cond_s,1200);
+    catch
+        rpt=struct('checks',{{}},'score',0,'n_pass',0,'n_total',8,...
+            'F_hub',Fh(:,find(rpm_sw>=1199,1)),...
+            'T_tight',Tt(:,find(rpm_sw>=1199,1)),...
+            'T_slack',Ts(:,find(rpm_sw>=1199,1)),...
+            'SF',SF(:,find(rpm_sw>=1199,1)),...
+            'belt_life_km',life,...
+            'suggestions',{{'Run FEAD_Validator for detailed checks.'}});
+        scr=50; sug={'Validator unavailable - run FEAD_Validator manually.'};
+    end
 
-    C.F_hub     = F_hub;
-    C.T_tight   = T_t;
-    C.T_slack   = T_s;
-    C.SF        = SF_arr;
-    C.P_kW      = P_arr;
-    C.v_belt    = v_arr;
-    C.belt_life = belt_life;
-    C.score     = score;
-    C.report    = report;
-    C.suggestions = suggestions;
+    C.Fh=Fh; C.Tt=Tt; C.Ts=Ts; C.SF=SF; C.Pk=Pk; C.vb=vb;
+    C.life=life; C.score=scr; C.sug=sug; C.rpt=rpt;
 end
 
-%% ── Recompute everything ───────────────────────────────────────────────────
+%% ── Recompute & update all ───────────────────────────────────────────────────
 function recompute()
-    S.cache = compute_sweep(S.pulleys, S.belt, S.load_table, S.conditions, rpm_sw);
+    S.cache = phys(S.pulleys,S.belt,LT,S.ac_on,S.night,S.bas,S.eng_brk);
     update_plots();
-    update_score();
+    update_score_badge();
     update_badges();
+    update_strip();
+    update_table();
     if ~isempty(S.dw) && isvalid(S.dw.fig)
-        FEAD_DataWindow_Update(S.dw, S.cache.report, S.belt, S.rpm, S.wp, S.load_table, S.pulleys);
+        rpt=S.cache.rpt; rpt.belt_life_km=S.cache.life;
+        rpt.suggestions=S.cache.sug;
+        FEAD_DataWindow_Update(S.dw,rpt,S.belt,S.rpm,WP,LT,S.pulleys);
     end
 end
 
-%% ── Update all 5 right-panel plots ─────────────────────────────────────────
+%% ── Plot updates ─────────────────────────────────────────────────────────────
 function update_plots()
-    C = S.cache;
-    pdf_F=[2658.9 2866.4 1710.1 1678.1 985.8 608.5];
+    C=S.cache;
 
-    %% Hub loads
+    %% 1. Hub loads
     cla(S.ax_hub); hold(S.ax_hub,'on');
     for k=1:np
-        plot(S.ax_hub,rpm_sw,C.F_hub(k,:),'LineWidth',2,'Color',PC{k},'DisplayName',pnames{k});
+        plot(S.ax_hub,rpm_sw,C.Fh(k,:),'LineWidth',2,...
+            'Color',PC{k},'DisplayName',pnames{k});
     end
-    for k=1:np, plot(S.ax_hub,1200,pdf_F(k),'o','MarkerSize',7,...
-            'Color',PC{k},'MarkerFaceColor',PC{k},'HandleVisibility','off'); end
-    xline(S.ax_hub,S.rpm,'--','Color',[1 1 1 0.3],'HandleVisibility','off');
-    xlabel(S.ax_hub,'RPM','Color',TC); ylabel(S.ax_hub,'F (N)','Color',TC);
-    title(S.ax_hub,'Hub Loads vs RPM','Color',AM,'FontWeight','bold');
-    legend(S.ax_hub,'TextColor',TC,'Color',AX,'Location','northwest','FontSize',8);
+    for k=1:np
+        plot(S.ax_hub,1200,pdf_F(k),'o','MarkerSize',8,'MarkerFaceColor',PC{k},...
+            'Color',PC{k},'HandleVisibility','off');
+    end
+    xl=xline(S.ax_hub,S.rpm,'--','Color',[1 1 1 0.25],'HandleVisibility','off');
+    xl.LabelHorizontalAlignment='center';
+    xlabel(S.ax_hub,'Engine RPM','Color',TC,'FontSize',9);
+    ylabel(S.ax_hub,'Hub Load  F (N)','Color',TC,'FontSize',9);
+    title(S.ax_hub,'Hub Loads vs RPM   (○ = Gates PDF reference @ 1200 RPM)',...
+        'Color',AM,'FontWeight','bold','FontSize',10);
+    legend(S.ax_hub,'TextColor',TC,'Color',[0.07 0.10 0.17],...
+        'Location','northwest','FontSize',8);
+    S.ax_hub.YLim(1)=0;
 
-    %% Tensions
+    %% 2. Tensions
     cla(S.ax_tens); hold(S.ax_tens,'on');
     for k=1:np
-        plot(S.ax_tens,rpm_sw,C.T_tight(k,:),'LineWidth',2,'Color',PC{k},'DisplayName',[pnames{k},' Tt']);
-        plot(S.ax_tens,rpm_sw,C.T_slack(k,:),'--','LineWidth',1,'Color',PC{k}*0.55,'HandleVisibility','off');
+        plot(S.ax_tens,rpm_sw,C.Tt(k,:),'LineWidth',2,...
+            'Color',PC{k},'DisplayName',[pnames{k},' T_tight']);
+        plot(S.ax_tens,rpm_sw,C.Ts(k,:),'--','LineWidth',1.2,...
+            'Color',PC{k}*0.55,'HandleVisibility','off');
     end
-    yline(S.ax_tens,S.belt.T_max,'r--','LineWidth',2,'Label',sprintf('T_{max}=%.0fN',S.belt.T_max),...
+    yline(S.ax_tens,S.belt.T_max,'r-','LineWidth',2,...
+        'Label',sprintf('T_{max}=%.0fN',S.belt.T_max),...
         'LabelHorizontalAlignment','left','HandleVisibility','off');
-    yline(S.ax_tens,S.belt.static_tension,'Color',AM,'LineStyle',':','LineWidth',1.5,...
-        'Label','T_0','HandleVisibility','off');
-    xlabel(S.ax_tens,'RPM','Color',TC); ylabel(S.ax_tens,'Tension (N)','Color',TC);
-    title(S.ax_tens,'Belt Tensions: Tight (solid) / Slack (dashed)','Color',AM,'FontWeight','bold');
-    legend(S.ax_tens,'TextColor',TC,'Color',AX,'Location','northwest','FontSize',8,'NumColumns',2);
+    yline(S.ax_tens,S.belt.static_tension,'Color',AM,'LineStyle',':',...
+        'LineWidth',1.5,'Label','T₀','HandleVisibility','off');
+    xlabel(S.ax_tens,'Engine RPM','Color',TC,'FontSize',9);
+    ylabel(S.ax_tens,'Tension (N)','Color',TC,'FontSize',9);
+    title(S.ax_tens,'Belt Tensions: solid=T_{tight}  dashed=T_{slack}',...
+        'Color',AM,'FontWeight','bold','FontSize',10);
+    legend(S.ax_tens,'TextColor',TC,'Color',[0.07 0.10 0.17],...
+        'Location','northwest','FontSize',7,'NumColumns',2);
+    S.ax_tens.YLim(1)=0;
 
-    %% Slip SF
+    %% 3. Slip SF
     cla(S.ax_sf); hold(S.ax_sf,'on');
     for k=1:np
-        plot(S.ax_sf,rpm_sw,min(C.SF(k,:),6),'LineWidth',2,'Color',PC{k},'DisplayName',pnames{k});
+        sf_k=min(C.SF(k,:),6);
+        plot(S.ax_sf,rpm_sw,sf_k,'LineWidth',2,...
+            'Color',PC{k},'DisplayName',pnames{k});
     end
-    yline(S.ax_sf,1.0,'r-','LineWidth',2,'Label','SF=1 SLIP','HandleVisibility','off');
-    yline(S.ax_sf,1.3,'Color',AM,'LineStyle','--','LineWidth',1.5,'Label','SF=1.3','HandleVisibility','off');
-    yline(S.ax_sf,2.0,'Color',GR,'LineStyle',':','LineWidth',1,'Label','SF=2.0 Safe','HandleVisibility','off');
+    yline(S.ax_sf,1.0,'r-','LineWidth',2,...
+        'Label','SF=1.0 (SLIP)','HandleVisibility','off');
+    yline(S.ax_sf,1.3,'Color',AM,'LineStyle','--','LineWidth',1.5,...
+        'Label','SF=1.3 (min OK)','HandleVisibility','off');
+    yline(S.ax_sf,2.0,'Color',GR,'LineStyle',':','LineWidth',1,...
+        'Label','SF=2.0 (safe)','HandleVisibility','off');
     ylim(S.ax_sf,[0 6]);
-    xlabel(S.ax_sf,'RPM','Color',TC); ylabel(S.ax_sf,'Slip Safety Factor','Color',TC);
-    title(S.ax_sf,'Capstan Slip SF vs RPM','Color',AM,'FontWeight','bold');
-    legend(S.ax_sf,'TextColor',TC,'Color',AX,'Location','northeast','FontSize',8);
+    xlabel(S.ax_sf,'Engine RPM','Color',TC,'FontSize',9);
+    ylabel(S.ax_sf,'Slip Safety Factor','Color',TC,'FontSize',9);
+    title(S.ax_sf,'Capstan Slip SF vs RPM','Color',AM,'FontWeight','bold','FontSize',10);
+    legend(S.ax_sf,'TextColor',TC,'Color',[0.07 0.10 0.17],...
+        'Location','northeast','FontSize',8);
 
-    %% Belt life bar
-    cla(S.ax_life);
-    b=bar(S.ax_life,C.belt_life/1000,'FaceColor','flat','EdgeColor','none');
+    %% 4. Belt Life
+    cla(S.ax_life); hold(S.ax_life,'on');
+    life_k=C.life/1e3;
+    b=bar(S.ax_life,life_k,'FaceColor','flat','EdgeColor','none','BarWidth',0.65);
     for k=1:np, b.CData(k,:)=PC{k}; end
-    S.ax_life.XTickLabel=pnames; S.ax_life.XColor=TC;
-    yline(S.ax_life,200,'--','Color',AM,'LineWidth',1.5,...
-        'Label','Min 200k km','LabelHorizontalAlignment','right');
-    xlabel(S.ax_life,'Pulley','Color',TC); ylabel(S.ax_life,'Life (×10³ km)','Color',TC);
-    title(S.ax_life,sprintf('Belt Fatigue Life – %s',S.belt.name),'Color',AM,'FontWeight','bold');
+    yline(S.ax_life,200,'--','Color',AM,'LineWidth',2,...
+        'Label','Min 200 000 km','LabelHorizontalAlignment','right',...
+        'HandleVisibility','off');
     for k=1:np
-        text(S.ax_life,k,C.belt_life(k)/1000+5,...
-            sprintf('%.0fk',C.belt_life(k)/1000),'Color',PC{k},...
+        text(S.ax_life,k,life_k(k)+3,...
+            sprintf('%.0f k',life_k(k)),'Color',PC{k},...
             'HorizontalAlignment','center','FontSize',8,'FontWeight','bold');
     end
+    set(S.ax_life,'XTick',1:np,'XTickLabel',pnames,'XColor',TC);
+    xlabel(S.ax_life,'Pulley','Color',TC,'FontSize',9);
+    ylabel(S.ax_life,'Belt Life (×10³ km)','Color',TC,'FontSize',9);
+    title(S.ax_life,sprintf('Belt Fatigue Life – %s  (WLTC weighted)',S.belt.name),...
+        'Color',AM,'FontWeight','bold','FontSize',10);
 
-    %% Validation
-    report  = C.report;
-    checks  = report.checks;
-    nc      = numel(checks);
+    %% 5. Validation
+    rpt=C.rpt;
+    checks=rpt.checks;
+    nc=numel(checks);
     cla(S.ax_val); hold(S.ax_val,'on');
-    for i=1:nc
-        clr=ternary(checks{i}.pass,GR,RD);
-        barh(S.ax_val,i,100,'FaceColor',clr,'FaceAlpha',0.3,'EdgeColor',clr,'LineWidth',1.5);
-        tick_txt = sprintf('%s  →  %s',checks{i}.label, checks{i}.msg);
-        text(S.ax_val,3,i,tick_txt,'Color',clr,'FontSize',9,'VerticalAlignment','middle');
+    if nc>0
+        for i=1:nc
+            clr=iif(checks{i}.pass,GR,RD);
+            barh(S.ax_val,i,100,'FaceColor',clr,'FaceAlpha',0.25,...
+                'EdgeColor',clr,'LineWidth',1.5);
+            sym=iif(checks{i}.pass,'✅','❌');
+            txt=sprintf('%s  %s  →  %s',sym,checks{i}.label,checks{i}.msg);
+            text(S.ax_val,2,i,txt,'Color',clr,...
+                'FontSize',8.5,'VerticalAlignment','middle');
+        end
+        set(S.ax_val,'YTick',1:nc,...
+            'YTickLabel',repmat({' '},1,nc),...
+            'XLim',[0 115],'YLim',[0 nc+1]);
+        title(S.ax_val,...
+            sprintf('Validation Score:  %d / 100   (%d of %d checks passed)',...
+            rpt.score,rpt.n_pass,nc),...
+            'Color',AM,'FontWeight','bold','FontSize',10);
     end
-    set(S.ax_val,'YTick',1:nc,'YTickLabel',repmat({' '},1,nc),...
-        'XLim',[0 115],'XColor',TC,'YColor',TC);
-    title(S.ax_val,...
-        sprintf('Validation  –  Score: %d/100  (%d/%d checks passed)',...
-        report.score, report.n_pass, nc),'Color',AM,'FontWeight','bold');
-
-    S.tx_sug.Value = C.suggestions;
+    S.tx_sug.Value=C.sug;
 
     drawnow limitrate;
 end
 
-%% ── Update score badge ─────────────────────────────────────────────────────
-function update_score()
-    sc = S.cache.score;
-    if sc>=80,    c=GR; elseif sc>=60, c=AM; else, c=RD; end
+%% ── Score badge ─────────────────────────────────────────────────────────────
+function update_score_badge()
+    sc=S.cache.score;
+    if sc>=80, c=GR; elseif sc>=60, c=AM; else, c=RD; end
     S.lbl_score.Text      = sprintf('Design Score:  %d / 100', sc);
     S.lbl_score.FontColor = c;
 end
 
-%% ── Update per-pulley badges ───────────────────────────────────────────────
+%% ── Per-pulley badge readouts ────────────────────────────────────────────────
 function update_badges()
+    if isempty(S.cache), return; end
     [~,ri]=min(abs(rpm_sw-S.rpm));
     for k=1:np
-        S.badge{k}.Text=sprintf('%s\n%.0f N',pnames{k},S.cache.F_hub(k,ri));
+        sf=S.cache.SF(k,ri);
+        sfclr=iif(sf>=1.3,'✅','⚠');
+        S.badge{k}.Text=sprintf('%s\nF=%.0fN  SF=%.1f %s',...
+            pnames{k},S.cache.Fh(k,ri),min(sf,9.99),sfclr);
     end
 end
 
-%% ═══ ANIMATION ENGINE ══════════════════════════════════════════════════════
-function ha = init_anim(ax, pl, colors)
+%% ── Top-strip summary ────────────────────────────────────────────────────────
+function update_strip()
+    if isempty(S.cache), return; end
+    [~,ri]=min(abs(rpm_sw-S.rpm));
+    v=S.cache.vb(ri);
+    fmax=max(S.cache.Fh(:,ri));
+    sfmin=min(S.cache.SF(:,ri));
+    S.txt_strip.Text=sprintf(...
+        'RPM=%d  |  v_belt=%.2fm/s  |  T₀=%.0fN  |  F_hub_max=%.0fN  |  SF_min=%.2f  |  Score=%d/100',...
+        round(S.rpm),v,S.belt.static_tension,fmax,sfmin,S.cache.score);
+end
+
+%% ── Results table ────────────────────────────────────────────────────────────
+function update_table()
+    if isempty(S.cache), return; end
+    [~,ri]=min(abs(rpm_sw-S.rpm));
+    d=cell(np,8);
+    for k=1:np
+        sf=S.cache.SF(k,ri); lf=S.cache.life(k);
+        pk=S.cache.Pk(k,ri);
+        status=iif(sf>=1.3&&lf>=200000,'✅ OK','⚠ CHK');
+        d{k,1}=pnames{k};
+        d{k,2}=sprintf('%.2f',pk);
+        d{k,3}=sprintf('%.0f',S.cache.Tt(k,ri));
+        d{k,4}=sprintf('%.0f',S.cache.Ts(k,ri));
+        d{k,5}=sprintf('%.0f',S.cache.Fh(k,ri));
+        d{k,6}=sprintf('%.2f',min(sf,9.99));
+        d{k,7}=sprintf('%.0f',lf);
+        d{k,8}=status;
+    end
+    S.tbl.Data=d;
+end
+
+%% ════════════════════════════════════════════════════════════════════════════
+%  ANIMATION ENGINE
+%% ════════════════════════════════════════════════════════════════════════════
+function gh = init_graphics(ax, pl)
     cla(ax); hold(ax,'on');
-    th  = linspace(0,2*pi,96);
-    npl = numel(pl);
-    ha.th = th; ha.h_disc=gobjects(npl,1); ha.h_hub=gobjects(npl,1);
-    ha.h_ring=gobjects(npl,1); ha.h_spk=cell(npl,1);
-    ha.h_span=gobjects(npl,1); ha.h_arr=gobjects(npl,1);
-    ha.h_atxt=gobjects(npl,1); ha.h_lbl=gobjects(npl,1);
-    ha.h_mrk=gobjects(16,1);
+    th=linspace(0,2*pi,96); npl=numel(pl);
+    gh.th=th; gh.h_disc=gobjects(npl,1); gh.h_hub=gobjects(npl,1);
+    gh.h_ring=gobjects(npl,1); gh.h_spk=cell(npl,1);
+    gh.h_span=gobjects(npl,1); gh.h_arr=gobjects(npl,1);
+    gh.h_atxt=gobjects(npl,1); gh.h_lbl=gobjects(npl,1);
+    gh.h_mrk=gobjects(16,1);
 
     for k=1:npl
-        px=pl(k).x; py=pl(k).y; r=pl(k).r; c=colors{k};
+        px=pl(k).x; py=pl(k).y; r=pl(k).r; c=PC{k};
         kn=mod(k,npl)+1;
-        ha.h_span(k)=plot(ax,[px pl(kn).x],[py pl(kn).y],...
-            'Color',[AM 0.5],'LineWidth',4);
-        ha.h_disc(k)=patch(ax,px+r*cos(th),py+r*sin(th),c*0.15,...
-            'EdgeColor',c,'LineWidth',2,'FaceAlpha',0.9);
-        ha.h_ring(k)=patch(ax,px+(r+6)*cos(th),py+(r+6)*sin(th),'none',...
+        gh.h_span(k)=plot(ax,[px pl(kn).x],[py pl(kn).y],...
+            'Color',[AM 0.45],'LineWidth',4.5);
+        gh.h_disc(k)=patch(ax,px+r*cos(th),py+r*sin(th),c*0.15,...
+            'EdgeColor',c,'LineWidth',2.2,'FaceAlpha',0.92);
+        gh.h_ring(k)=patch(ax,px+(r+7)*cos(th),py+(r+7)*sin(th),'none',...
             'EdgeColor',GR,'LineWidth',3);
-        ha.h_hub(k) =patch(ax,px+r*.18*cos(th),py+r*.18*sin(th),...
-            [0.04 0.06 0.10],'EdgeColor',[0.5 0.6 0.7],'LineWidth',1.5);
-        ha.h_spk{k}=gobjects(4,1);
+        gh.h_hub(k) =patch(ax,px+r*.18*cos(th),py+r*.18*sin(th),...
+            [0.04 0.06 0.10],'EdgeColor',[0.45 0.55 0.65],'LineWidth',1.5);
+        gh.h_spk{k} =gobjects(4,1);
         for s=1:4
             a=(s-1)*pi/2;
-            ha.h_spk{k}(s)=plot(ax,...
+            gh.h_spk{k}(s)=plot(ax,...
                 [px+r*.18*cos(a) px+r*.85*cos(a)],...
                 [py+r*.18*sin(a) py+r*.85*sin(a)],...
                 'Color',c,'LineWidth',2.5);
         end
-        ha.h_lbl(k)=text(ax,px,py+r+16,pnames{k},...
+        gh.h_lbl(k)=text(ax,px,py+r+18,pnames{k},...
             'HorizontalAlignment','center','Color',c,...
             'FontSize',9,'FontWeight','bold');
-        ha.h_arr(k) =quiver(ax,px,py,0,0,'Color',RD,...
-            'LineWidth',2,'MaxHeadSize',0.6,'AutoScale','off');
-        ha.h_atxt(k)=text(ax,px+4,py+4,'','Color',[0.97 0.60 0.60],...
-            'FontSize',8,'FontWeight','bold');
+        gh.h_arr(k)=quiver(ax,px,py,0,0,'Color',RD,...
+            'LineWidth',2,'MaxHeadSize',0.55,'AutoScale','off');
+        gh.h_atxt(k)=text(ax,px+4,py+4,'',...
+            'Color',[0.98 0.65 0.65],'FontSize',8,'FontWeight','bold');
     end
     for m=1:16
-        ha.h_mrk(m)=plot(ax,0,0,'s','Color',[1.0 0.82 0.25],...
-            'MarkerSize',4.5,'MarkerFaceColor',[1.0 0.82 0.25]);
+        gh.h_mrk(m)=plot(ax,0,0,'s','Color',[1.0 0.82 0.26],...
+            'MarkerSize',4.5,'MarkerFaceColor',[1.0 0.82 0.26]);
     end
-    ha.lbl_rpm  =text(ax,-405,520,'RPM: —','Color',AM,'FontSize',11,'FontWeight','bold');
-    ha.lbl_vel  =text(ax,-405,493,'Belt v: —','Color',VI,'FontSize',10);
-    ha.lbl_t0   =text(ax,-405,466,'T₀: —','Color',[0.38 0.64 0.98],'FontSize',10);
-    ha.lbl_score=text(ax,-405,432,'Score: —','Color',GR,'FontSize',11,'FontWeight','bold');
-    ha.mrk_pos  =linspace(0,1,16);
+    gh.ov_rpm  =text(ax,-408,528,'RPM: —','Color',AM,'FontSize',11,'FontWeight','bold');
+    gh.ov_vel  =text(ax,-408,500,'v_belt: —','Color',VI,'FontSize',10);
+    gh.ov_t0   =text(ax,-408,474,'T₀: —','Color',[0.38 0.64 0.98],'FontSize',10);
+    gh.ov_score=text(ax,-408,440,'Score: —','Color',GR,'FontSize',12,'FontWeight','bold');
+    gh.mrk_pos =linspace(0,1,16);
 end
 
 function anim_step()
-    if ~isvalid(fig) || ~S.running, return; end
-    dt=1/25; pl=S.pulleys;
+    if ~isvalid(fig)||~S.running, return; end
+    dt=1/25; pl=S.pulleys; npl=numel(pl);
     v=pl(1).r/1000*S.rpm*2*pi/60;
-    npl=numel(pl);
 
+    % Rotate spokes
     for k=1:npl
-        r_k=pl(k).r/1000; om=v/r_k;
+        rk=pl(k).r/1000; om=v/rk;
         if ~pl(k).cw, om=-om; end
-        S.ang_off(k)=S.ang_off(k)+om*dt;
+        S.ang(k)=S.ang(k)+om*dt;
+        px=pl(k).x; py=pl(k).y; r=pl(k).r;
         for s=1:4
-            a=(s-1)*pi/2+S.ang_off(k);
-            px=pl(k).x; py=pl(k).y; r=pl(k).r;
-            set(S.anim.h_spk{k}(s),...
+            a=(s-1)*pi/2+S.ang(k);
+            set(S.gh.h_spk{k}(s),...
                 'XData',[px+r*.18*cos(a) px+r*.85*cos(a)],...
                 'YData',[py+r*.18*sin(a) py+r*.85*sin(a)]);
         end
     end
 
-    % Belt marker travel
-    spans_x=[pl.x pl(1).x]; spans_y=[pl.y pl(1).y];
+    % Move belt markers
+    sx=[pl.x pl(1).x]; sy=[pl.y pl(1).y];
     cum=zeros(1,npl+1);
-    for k=1:npl
-        cum(k+1)=cum(k)+hypot(spans_x(k+1)-spans_x(k),spans_y(k+1)-spans_y(k));
-    end
-    bspeed=v*dt/max(cum(end),1); 
-    S.anim.mrk_pos=mod(S.anim.mrk_pos+bspeed,1);
+    for k=1:npl, cum(k+1)=cum(k)+hypot(sx(k+1)-sx(k),sy(k+1)-sy(k)); end
+    bsp=v*dt/max(cum(end),1);
+    S.gh.mrk_pos=mod(S.gh.mrk_pos+bsp,1);
     for m=1:16
-        pm=S.anim.mrk_pos(m)*cum(end);
+        pm=S.gh.mrk_pos(m)*cum(end);
         sg=find(cum<=pm,1,'last'); sg=min(sg,npl);
         fr=(pm-cum(sg))/max(cum(sg+1)-cum(sg),1);
-        set(S.anim.h_mrk(m),...
-            'XData',spans_x(sg)*(1-fr)+spans_x(sg+1)*fr,...
-            'YData',spans_y(sg)*(1-fr)+spans_y(sg+1)*fr);
+        set(S.gh.h_mrk(m),'XData',sx(sg)*(1-fr)+sx(sg+1)*fr,...
+            'YData',sy(sg)*(1-fr)+sy(sg+1)*fr);
     end
 
-    % Hub load arrows + slip rings from cache
+    % Update hub-load arrows + slip rings
     if ~isempty(S.cache)
         [~,ri]=min(abs(rpm_sw-S.rpm));
         for k=1:npl
-            F=S.cache.F_hub(k,ri); sf=S.cache.SF(k,ri);
+            F=S.cache.Fh(k,ri); sf=S.cache.SF(k,ri);
             kp=mod(k-2,npl)+1; kn=mod(k,npl)+1;
-            dx_p=pl(kp).x-pl(k).x; dy_p=pl(kp).y-pl(k).y;
-            dx_n=pl(kn).x-pl(k).x; dy_n=pl(kn).y-pl(k).y;
-            Lp=max(hypot(dx_p,dy_p),1); Ln=max(hypot(dx_n,dy_n),1);
-            Tt=S.cache.T_tight(k,ri); Ts=S.cache.T_slack(k,ri);
-            Fx=Tt*dx_p/Lp+Ts*dx_n/Ln; Fy=Tt*dy_p/Lp+Ts*dy_n/Ln;
-            sc=min(F/4500,1)*65+8;
+            dxp=pl(kp).x-pl(k).x; dyp=pl(kp).y-pl(k).y;
+            dxn=pl(kn).x-pl(k).x; dyn=pl(kn).y-pl(k).y;
+            Lp=max(hypot(dxp,dyp),1); Ln=max(hypot(dxn,dyn),1);
+            Tt=S.cache.Tt(k,ri); Ts=S.cache.Ts(k,ri);
+            Fx=Tt*dxp/Lp+Ts*dxn/Ln; Fy=Tt*dyp/Lp+Ts*dyn/Ln;
+            sc=min(F/5000,1)*70+8;
             if F>10
                 ex=Fx/max(F,1)*sc; ey=Fy/max(F,1)*sc;
-                set(S.anim.h_arr(k),'XData',pl(k).x,'YData',pl(k).y,'UData',ex,'VData',ey);
-                set(S.anim.h_atxt(k),'Position',[pl(k).x+ex+4,pl(k).y+ey+4],'String',sprintf('%.0fN',F));
+                set(S.gh.h_arr(k),'XData',pl(k).x,'YData',pl(k).y,...
+                    'UData',ex,'VData',ey);
+                set(S.gh.h_atxt(k),'Position',...
+                    [pl(k).x+ex+5,pl(k).y+ey+5],...
+                    'String',sprintf('%.0fN',F));
             end
-            rc=ternary(sf>=1.3, GR, ternary(sf>=1.0, AM, RD));
-            S.anim.h_ring(k).EdgeColor=rc;
+            rc=iif(sf>=1.3,GR,iif(sf>=1.0,AM,RD));
+            S.gh.h_ring(k).EdgeColor=rc;
         end
-        S.anim.lbl_rpm.String  = sprintf('Engine: %d RPM',round(S.rpm));
-        S.anim.lbl_vel.String  = sprintf('Belt v: %.2f m/s',v);
-        S.anim.lbl_t0.String   = sprintf('T₀: %d N',round(S.belt.static_tension));
-        sc=S.cache.score;
-        scl=ternary(sc>=80,GR,ternary(sc>=60,AM,RD));
-        S.anim.lbl_score.String=sprintf('Score: %d/100',sc);
-        S.anim.lbl_score.Color =scl;
+        S.gh.ov_rpm.String  = sprintf('Engine: %d RPM',round(S.rpm));
+        S.gh.ov_vel.String  = sprintf('v_{belt}: %.2f m/s',v);
+        S.gh.ov_t0.String   = sprintf('T₀: %d N',round(S.belt.static_tension));
+        sc2=S.cache.score;
+        S.gh.ov_score.String= sprintf('Score: %d / 100',sc2);
+        S.gh.ov_score.Color = iif(sc2>=80,GR,iif(sc2>=60,AM,RD));
     end
     drawnow limitrate;
 end
 
-function update_anim_layout()
-    pl=S.pulleys; npl=numel(pl);
-    th=S.anim.th;
+function update_layout_graphics()
+    pl=S.pulleys; npl=numel(pl); th=S.gh.th;
     for k=1:npl
         px=pl(k).x; py=pl(k).y; r=pl(k).r;
         kn=mod(k,npl)+1;
-        S.anim.h_disc(k).XData=px+r*cos(th); S.anim.h_disc(k).YData=py+r*sin(th);
-        S.anim.h_ring(k).XData=px+(r+6)*cos(th); S.anim.h_ring(k).YData=py+(r+6)*sin(th);
-        S.anim.h_hub(k).XData =px+r*.18*cos(th); S.anim.h_hub(k).YData =py+r*.18*sin(th);
-        S.anim.h_lbl(k).Position(1:2)=[px,py+r+16];
-        S.anim.h_span(k).XData=[px pl(k+mod(0,npl)).x]; % will fix below
-    end
-    for k=1:npl
-        kn=mod(k,npl)+1;
-        S.anim.h_span(k).XData=[pl(k).x pl(kn).x];
-        S.anim.h_span(k).YData=[pl(k).y pl(kn).y];
+        S.gh.h_disc(k).XData=px+r*cos(th); S.gh.h_disc(k).YData=py+r*sin(th);
+        S.gh.h_ring(k).XData=px+(r+7)*cos(th); S.gh.h_ring(k).YData=py+(r+7)*sin(th);
+        S.gh.h_hub(k).XData =px+r*.18*cos(th); S.gh.h_hub(k).YData =py+r*.18*sin(th);
+        S.gh.h_lbl(k).Position(1:2)=[px, py+r+18];
+        S.gh.h_span(k).XData=[px pl(kn).x]; S.gh.h_span(k).YData=[py pl(kn).y];
     end
 end
 
-%% ═══ CALLBACKS ═════════════════════════════════════════════════════════════
-function toggle_anim()
+%% ════════════════════════════════════════════════════════════════════════════
+%  CALLBACKS
+%% ════════════════════════════════════════════════════════════════════════════
+function cb_anim(~,~)
     S.running=~S.running;
     if S.running
-        S.btn_anim.Text='⏹ Stop'; S.btn_anim.BackgroundColor=[0.22 0.06 0.06];
-        if strcmp(S.timer.Running,'off'), start(S.timer); end
+        S.btn_anim.Text='⏹  Stop Animation';
+        S.btn_anim.BackgroundColor=[0.22 0.06 0.06];
+        if strcmp(S.tmr.Running,'off'), start(S.tmr); end
     else
-        S.btn_anim.Text='▶ Animate'; S.btn_anim.BackgroundColor=[0.08 0.20 0.12];
+        S.btn_anim.Text='▶  Start Animation';
+        S.btn_anim.BackgroundColor=[0.08 0.20 0.12];
     end
 end
 
-function do_validate()
+function cb_validate(~,~)
     recompute();
-    r=S.cache.report;
-    uialert(fig,sprintf('Score: %d/100\n%d of %d checks passed\n\n%s',...
-        r.score,r.n_pass,r.n_total,strjoin(S.cache.suggestions,newline)),...
-        'Validation','Icon','info');
+    sc=S.cache.score;
+    uialert(fig,...
+        sprintf(['Score: %d/100\n%d of 8 checks passed\n\n'...
+        'Min SF = %.2f\nMax F_hub = %.0f N\nBelt life = %.0f km\n\n%s'],...
+        sc,S.cache.rpt.n_pass,...
+        min(S.cache.SF(:,find(rpm_sw>=1199,1))),...
+        max(S.cache.Fh(:,find(rpm_sw>=1199,1))),...
+        min(S.cache.life),...
+        strjoin(S.cache.sug,newline)),...
+        'Design Validation','Icon',iif(sc>=80,'success',iif(sc>=60,'warning','error')));
 end
 
-function do_optimise()
-    [~,~,~,opt]=FEAD_Validator(S.pulleys,S.belt,S.load_table,S.conditions,1200);
-    if opt(6).x~=S.pulleys(6).x || opt(6).y~=S.pulleys(6).y
-        S.pulleys(6).x=opt(6).x; S.pulleys(6).y=opt(6).y;
-        S.ef_px{6}.Value=opt(6).x; S.ef_py{6}.Value=opt(6).y;
-        update_anim_layout(); recompute();
-        uialert(fig,sprintf('Tensioner → X=%.0f, Y=%.0f mm\nHub loads minimised.',opt(6).x,opt(6).y),...
-            'Optimised','Icon','success');
-    else
-        uialert(fig,'Tensioner already at optimal position.','Optimise','Icon','info');
+function cb_optimise(~,~)
+    try
+        [~,~,~,opt]=FEAD_Validator(S.pulleys,S.belt,LT,...
+            struct('ac',S.ac_on,'nightRun',S.night,'bas',S.bas,'temp_C',S.temp_C),1200);
+        moved=false;
+        if opt(6).x~=S.pulleys(6).x||opt(6).y~=S.pulleys(6).y
+            S.pulleys(6).x=opt(6).x; S.pulleys(6).y=opt(6).y;
+            S.ef_x{6}.Value=opt(6).x; S.ef_y{6}.Value=opt(6).y;
+            moved=true;
+        end
+        update_layout_graphics(); recompute();
+        if moved
+            uialert(fig,sprintf('Tensioner moved to X=%.0f, Y=%.0f mm\nTotal hub load reduced.',...
+                opt(6).x,opt(6).y),'Optimised','Icon','success');
+        else
+            uialert(fig,'Tensioner already at optimal position.','Optimise','Icon','info');
+        end
+    catch e
+        uialert(fig,['Optimise failed: ' e.message],'Error','Icon','error');
     end
 end
 
-function open_dw()
+function cb_dw(~,~)
     if isempty(S.dw)||~isvalid(S.dw.fig), S.dw=FEAD_DataWindow(); end
     figure(S.dw.fig);
-    FEAD_DataWindow_Update(S.dw,S.cache.report,S.belt,S.rpm,S.wp,S.load_table,S.pulleys);
+    rpt=S.cache.rpt; rpt.belt_life_km=S.cache.life; rpt.suggestions=S.cache.sug;
+    FEAD_DataWindow_Update(S.dw,rpt,S.belt,S.rpm,WP,LT,S.pulleys);
 end
 
-function do_simscape()
+function cb_simscape(~,~)
     assignin('base','pulleys',S.pulleys);
-    assignin('base','belt',   S.belt);
+    assignin('base','belt',S.belt);
     try
-        FEAD_TestRig_Builder(S.pulleys,S.belt,S.load_table,S.conditions);
-        uialert(fig,'FEAD_TestRig.slx built and opened.','Simscape','Icon','success');
+        FEAD_TestRig_Builder(S.pulleys,S.belt,LT,...
+            struct('ac',S.ac_on,'nightRun',S.night,'bas',S.bas,'temp_C',S.temp_C));
+        uialert(fig,'FEAD_TestRig.slx built. Open in Simulink.','Simscape','Icon','success');
     catch e
         uialert(fig,['Build error: ' e.message],'Simscape','Icon','error');
     end
 end
 
-function do_github()
+function cb_github(~,~)
+    rpt=S.cache.rpt; rpt.belt_life_km=S.cache.life; rpt.suggestions=S.cache.sug;
     try
-        push_to_github(S.pulleys, S.belt, S.cache.report);
+        push_to_github(S.pulleys,S.belt,rpt);
+        uialert(fig,'Pushed to GitHub successfully.','GitHub','Icon','success');
     catch e
-        uialert(fig,['GitHub push error: ' e.message],'GitHub','Icon','error');
+        uialert(fig,['GitHub push failed: ' e.message],'GitHub','Icon','error');
     end
 end
 
-function do_reset()
+function cb_reset(~,~)
     FEAD_params;
     S.pulleys=evalin('base','pulleys');
+    S.belt.static_tension=evalin('base','belt.static_tension');
     for k=1:np
-        S.ef_px{k}.Value=S.pulleys(k).x;
-        S.ef_py{k}.Value=S.pulleys(k).y;
-        S.ef_pr{k}.Value=S.pulleys(k).r;
+        S.ef_x{k}.Value=S.pulleys(k).x;
+        S.ef_y{k}.Value=S.pulleys(k).y;
+        S.ef_r{k}.Value=S.pulleys(k).r;
     end
-    update_anim_layout(); recompute();
+    S.sl_ten.Value=S.belt.static_tension;
+    S.lbl_ten.Text=sprintf('%d N',round(S.belt.static_tension));
+    update_layout_graphics(); recompute();
 end
 
-function do_import()
-    [f,p]=uigetfile('*.json','Select web tool JSON');
+function cb_import(~,~)
+    [f,p]=uigetfile('*.json','Select web-tool JSON');
     if isnumeric(f), return; end
     try
         d=jsondecode(fileread(fullfile(p,f)));
-        if isfield(d,'pulleys')
-            fn=fieldnames(d.pulleys);
-            for ki=1:min(numel(fn),np)
-                pf=d.pulleys.(fn{ki});
-                idx=find(strcmp(pnames,fn{ki}),1);
-                if isempty(idx), continue; end
-                if isfield(pf,'x'), S.pulleys(idx).x=pf.x; S.ef_px{idx}.Value=pf.x; end
-                if isfield(pf,'y'), S.pulleys(idx).y=pf.y; S.ef_py{idx}.Value=pf.y; end
-                if isfield(pf,'r'), S.pulleys(idx).r=pf.r; S.ef_pr{idx}.Value=pf.r; end
-            end
+        fn=fieldnames(d.pulleys);
+        for ki=1:min(numel(fn),np)
+            idx=find(strcmp(pnames,fn{ki}),1); if isempty(idx),continue;end
+            pf=d.pulleys.(fn{ki});
+            if isfield(pf,'x'),S.pulleys(idx).x=pf.x;S.ef_x{idx}.Value=pf.x;end
+            if isfield(pf,'y'),S.pulleys(idx).y=pf.y;S.ef_y{idx}.Value=pf.y;end
+            if isfield(pf,'r'),S.pulleys(idx).r=pf.r;S.ef_r{idx}.Value=pf.r;end
         end
-        if isfield(d,'rpm'),           S.rpm=d.rpm; S.sl_rpm.Value=S.rpm; on_rpm(S.rpm); end
-        if isfield(d,'staticTension'), S.belt.static_tension=d.staticTension; S.sl_ten.Value=d.staticTension; end
-        update_anim_layout(); recompute();
-        uialert(fig,'Import successful.','Import','Icon','success');
+        if isfield(d,'rpm'), S.rpm=d.rpm; S.sl_rpm.Value=S.rpm; end
+        if isfield(d,'staticTension')
+            S.belt.static_tension=d.staticTension;
+            S.sl_ten.Value=d.staticTension;
+        end
+        update_layout_graphics(); recompute();
+        uialert(fig,'Layout imported.','Import','Icon','success');
     catch e
         uialert(fig,['Import failed: ' e.message],'Import','Icon','error');
     end
 end
 
-function on_belt(val)
-    idx=find(strcmp({belt_lib.name},val),1);
-    if isempty(idx), return; end
-    S.belt=belt_lib(idx);
-    S.belt.static_tension=S.sl_ten.Value;
+function cb_belt(src,~)
+    idx=find(strcmp({BLIB.name},src.Value),1);
+    if isempty(idx),return;end
+    prev_t0=S.belt.static_tension;
+    S.belt=BLIB(idx);
+    S.belt.static_tension=prev_t0;
     S.belt.length_m=S.belt.length_mm/1000;
-    S.lbl_binfo.Text=belt_info_str(S.belt);
+    S.lbl_belt.Text=beltstr(S.belt);
     recompute();
 end
 
-function on_rpm(val)
-    S.rpm=round(val/50)*50;
+function cb_rpm(src,~)
+    S.rpm=round(src.Value/50)*50;
     S.sl_rpm.Value=S.rpm;
     S.lbl_rpm.Text=sprintf('%d RPM',S.rpm);
-    update_badges();
-    % Vertical line on hub/tens/SF plots
-    try
-        ax_list={S.ax_hub,S.ax_tens,S.ax_sf};
-        for ai=1:3
-            ax_i=ax_list{ai};
-            kids=ax_i.Children;
-            for ki=1:numel(kids)
-                if isprop(kids(ki),'LineStyle') && strcmp(kids(ki).LineStyle,'--') && numel(kids(ki).XData)==2 && kids(ki).XData(1)==kids(ki).XData(2)
-                    kids(ki).XData=[S.rpm S.rpm];
-                end
-            end
-        end
-    catch, end
+    update_badges(); update_strip(); update_table();
     drawnow limitrate;
 end
 
-function on_ten(val)
-    S.belt.static_tension=round(val/10)*10;
+function cb_tension(src,~)
+    S.belt.static_tension=round(src.Value/10)*10;
     S.lbl_ten.Text=sprintf('%d N',S.belt.static_tension);
     recompute();
 end
 
-function on_tenpos(val)
-    idx=find(strcmp({S.ten_pos.label},val),1);
-    if isempty(idx), return; end
+function cb_tenpos(~,evt)
+    lbl_sel=evt.NewValue.Text;
+    idx=find(strcmp({TPOS.label},lbl_sel),1);
+    if isempty(idx),return;end
     S.ten_idx=idx;
-    S.pulleys(6).x=S.ten_pos(idx).x; S.pulleys(6).y=S.ten_pos(idx).y;
-    S.belt.static_tension=S.ten_pos(idx).T;
-    S.ef_px{6}.Value=S.pulleys(6).x; S.ef_py{6}.Value=S.pulleys(6).y;
-    S.sl_ten.Value=S.belt.static_tension;
-    S.lbl_ten.Text=sprintf('%d N',round(S.belt.static_tension));
-    update_anim_layout(); recompute();
+    S.pulleys(6).x=TPOS(idx).x; S.pulleys(6).y=TPOS(idx).y;
+    S.belt.static_tension=TPOS(idx).T;
+    S.ef_x{6}.Value=TPOS(idx).x; S.ef_y{6}.Value=TPOS(idx).y;
+    S.sl_ten.Value=TPOS(idx).T;
+    S.lbl_ten.Text=sprintf('%d N',round(TPOS(idx).T));
+    S.lbl_ten2.Text=sprintf('T₀ = %.0f N  (%s position, arm=%.1fmm)',...
+        TPOS(idx).T, TPOS(idx).label, TPOS(idx).arm);
+    update_layout_graphics(); recompute();
 end
 
-function on_cond(field,val)
-    S.conditions.(field)=val;
-    recompute();
+function cb_cond(field,val)
+    S.(field)=val; recompute();
 end
 
-function on_pedit(k,field,val)
+function cb_pedit(k,field,val)
     S.pulleys(k).(field)=val;
-    update_anim_layout(); recompute();
+    update_layout_graphics(); recompute();
 end
 
-function on_mdown(~,~)
-    cp=ax_anim.CurrentPoint;
-    if isempty(cp), return; end
+function mdown(~,~)
+    cp=S.ax.CurrentPoint; if isempty(cp),return;end
     for k=1:np
         if hypot(cp(1,1)-S.pulleys(k).x,cp(1,2)-S.pulleys(k).y)<S.pulleys(k).r*1.5
             S.dragging=k; return;
@@ -714,41 +866,34 @@ function on_mdown(~,~)
     end
 end
 
-function on_mmove(~,~)
-    if S.dragging<1, return; end
-    cp=ax_anim.CurrentPoint;
-    if isempty(cp), return; end
+function mmove(~,~)
+    if S.dragging<1,return;end
+    cp=S.ax.CurrentPoint; if isempty(cp),return;end
     k=S.dragging;
-    S.pulleys(k).x=round(cp(1,1));
-    S.pulleys(k).y=round(cp(1,2));
-    S.ef_px{k}.Value=S.pulleys(k).x;
-    S.ef_py{k}.Value=S.pulleys(k).y;
-    update_anim_layout();
-    drawnow limitrate;
+    S.pulleys(k).x=round(cp(1,1)); S.pulleys(k).y=round(cp(1,2));
+    S.ef_x{k}.Value=S.pulleys(k).x; S.ef_y{k}.Value=S.pulleys(k).y;
+    update_layout_graphics(); drawnow limitrate;
 end
 
-function on_mup(~,~)
-    if S.dragging>0
-        S.dragging=-1;
-        recompute();
-    end
+function mup(~,~)
+    if S.dragging>0, S.dragging=-1; recompute(); end
 end
 
-function on_close(~,~)
-    if strcmp(S.timer.Running,'on'), stop(S.timer); end
-    delete(S.timer);
-    if ~isempty(S.dw)&&isvalid(S.dw.fig), delete(S.dw.fig); end
+function cb_close(~,~)
+    if strcmp(S.tmr.Running,'on'),stop(S.tmr);end
+    delete(S.tmr);
+    if ~isempty(S.dw)&&isvalid(S.dw.fig),delete(S.dw.fig);end
     delete(fig);
 end
 
 end % FEAD_App
 
-%% ── Helpers ─────────────────────────────────────────────────────────────────
-function s=belt_info_str(b)
-    s=sprintf('L=%.0fmm  μ=%.2f  %d-rib  %s  T_max=%.0fN',...
+%% ── Module-level helpers (local functions, not nested) ───────────────────────
+function s=beltstr(b)
+    s=sprintf('L=%.0fmm | μ=%.2f | %d-rib | %s | T_max=%.0fN',...
         b.length_mm,b.mu,b.ribs,b.core,b.T_max);
 end
 
-function out=ternary(cond,a,b)
-    if cond, out=a; else, out=b; end
+function out=iif(cond,a,b)
+    if cond,out=a;else,out=b;end
 end
