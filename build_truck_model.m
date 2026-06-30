@@ -1,4 +1,4 @@
-%% build_truck_model.m  –  H6 Truck System Simulink Model (Robust Port-Handle Build)
+﻿%% build_truck_model.m  –  H6 Truck System Simulink Model (Robust Port-Handle Build)
 %  Builds H6_Truck_System.slx with all subsystems connected using port handles.
 %  Subsystems: Driver | Engine | FEAD | Transmission | Driveline | Wheels | Chassis | Brakes
 %

@@ -1,4 +1,4 @@
-%% startup_fead.m  –  Auto-runs when MATLAB opens the fead-matlab folder
+﻿%% startup_fead.m  –  Auto-runs when MATLAB opens the fead-matlab folder
 %  Sets path, loads parameters, and prints quick-start menu.
 % ─────────────────────────────────────────────────────────────────────────────
 
@@ -11,8 +11,8 @@ FEAD_params;
 clc;
 fprintf('\n');
 fprintf('╔═══════════════════════════════════════════════════════════════════╗\n');
-fprintf('║   Gates FEAD Belt Drive Test Rig  –  MATLAB Suite               ║\n');
-fprintf('║   Ashok Leyland H6  ·  Simscape / Simulink / App Designer       ║\n');
+fprintf('║   FEAD Belt Drive Test Rig  –  MATLAB Suite               ║\n');
+fprintf('║   H6 OEM Engine  ·  Simscape / Simulink / App Designer       ║\n');
 fprintf('╠═══════════════════════════════════════════════════════════════════╣\n');
 fprintf('║                                                                   ║\n');
 fprintf('║  ▶ FULL APP (recommended):                                        ║\n');

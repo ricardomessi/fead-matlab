@@ -1,4 +1,4 @@
-%% FEAD_params.m  –  Gates Belt Drive & Ashok Leyland H6 Truck – All Parameters
+﻿%% FEAD_params.m  –  V-Ribbed Belt Drive & H6 OEM Engine Truck – All Parameters
 %  Run this script before opening any model. Sets workspace variables used
 %  by every Simscape/Simulink block via 'Variable' or 'From Workspace'.
 %
@@ -7,12 +7,12 @@
 %          >> build_truck_model       % then open H6_Truck_System.slx
 % ─────────────────────────────────────────────────────────────────────────────
 clear; clc;
-fprintf('=== Loading FEAD & Truck Parameters (Ashok Leyland H6) ===\n\n');
+fprintf('=== Loading FEAD & Truck Parameters (H6 OEM Engine) ===\n\n');
 
 %% ═══════════════════════════════════════════════════════════════════════════
-%  1. BELT PROPERTIES  –  Gates Micro-V MT620 AMD  8-Rib Aramid
+%  1. BELT PROPERTIES  –  Micro-V MT620 AMD  8-Rib Aramid
 % ═══════════════════════════════════════════════════════════════════════════
-belt.name        = 'Gates MT620 AMD 8-Rib Aramid';
+belt.name        = 'MT620 AMD 8-Rib Aramid';
 belt.ribs        = 8;
 belt.pitch_mm    = 3.56;          % mm  rib pitch
 belt.length_mm   = 1577.3;        % mm  pitch length
@@ -29,7 +29,7 @@ belt.wohler_Tref = 1200;          % N    reference tension
 belt.static_tension = 480;        % N    design static (MEAN position)
 
 %% ═══════════════════════════════════════════════════════════════════════════
-%  2. PULLEY DATUM COORDINATES  (Gates PDF – CRK origin)
+%  2. PULLEY DATUM COORDINATES  (Reference PDF – CRK origin)
 %     Fields: x[mm], y[mm], r[mm], eff_dia[mm], speed_ratio, cw(bool)
 % ═══════════════════════════════════════════════════════════════════════════
 %  Struct array:  pulleys(i).name / .x / .y / .r / .eff / .sr / .cw
@@ -114,7 +114,7 @@ wp.ref.L10B    =  3860;       % h
 wp.ref.L10comp =  3305;       % h
 
 %% ═══════════════════════════════════════════════════════════════════════════
-%  6. ENGINE – Ashok Leyland H6  6-Cyl Diesel
+%  6. ENGINE – H6 OEM Engine  6-Cyl Diesel
 % ═══════════════════════════════════════════════════════════════════════════
 engine.name           = 'AL H6 6-Cyl Diesel';
 engine.displacement_L = 5.1;

@@ -1,4 +1,4 @@
-%% build_waterpump_ss.m  –  Water Pump Subsystem (gear-driven via engine front)
+﻿%% build_waterpump_ss.m  –  Water Pump Subsystem (gear-driven via engine front)
 %  Models the WP as a gear-driven centrifugal pump with:
 %    • Pump torque vs flow speed characteristic
 %    • Bearing load calculation (ISO 281 L10 life)

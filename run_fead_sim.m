@@ -1,4 +1,4 @@
-%% run_fead_sim.m  –  Run the FEAD Belt Drive simulation & auto-plot results
+﻿%% run_fead_sim.m  –  Run the FEAD Belt Drive simulation & auto-plot results
 %  Computes hub loads, belt tensions, slip SF, fatigue life, WP bearing life
 %  and frictional power — both numerically and with publication-quality plots.
 %
@@ -8,7 +8,7 @@
 if ~exist('pulleys','var'), FEAD_params; end
 
 fprintf('\n═══════════════════════════════════════════════════════\n');
-fprintf('  FEAD Belt Drive Test Rig  –  Ashok Leyland H6\n');
+fprintf('  FEAD Belt Drive Test Rig  –  H6 OEM Engine\n');
 fprintf('═══════════════════════════════════════════════════════\n\n');
 
 %% ── Sweep RPM range ─────────────────────────────────────────────────────────
@@ -27,7 +27,7 @@ SF_slip  = zeros(np, n_rpm);   % Slip safety factor
 v_belt   = zeros(1, n_rpm);    % Belt velocity [m/s]
 P_total  = zeros(1, n_rpm);    % Total FEAD power [kW]
 
-% Wrap angles (from Gates PDF baseline)
+% Wrap angles (from Reference PDF baseline)
 wrap_deg = [166.5, 127.6, 108.4, 145.1, 105.7, 76.4];
 
 fprintf('Computing over %d RPM points...\n', n_rpm);
@@ -94,7 +94,7 @@ for k = 1:np
 end
 
 % Compare with PDF baseline
-fprintf('\nVs. Gates PDF Baseline (1200 RPM, MEAN tensioner):\n');
+fprintf('\nVs. Reference PDF Baseline (1200 RPM, MEAN tensioner):\n');
 pdf_F   = [2658.9, 2866.4, 1710.1, 1678.1, 985.8, 608.5];
 pdf_dir = [96, 258, 77, 279, 49, 237];
 for k = 1:np
@@ -275,7 +275,7 @@ yline(ax6,500,'--','Color',[0.96 0.62 0.04],'LineWidth',1.5,'DisplayName','500 0
 grid(ax6,'on');
 
 % Super title
-sgtitle(fig_main,'Gates FEAD Test Rig — Ashok Leyland H6 — Simscape Results',...
+sgtitle(fig_main,'FEAD Test Rig — H6 OEM Engine — Simscape Results',...
     'Color',[0.96 0.62 0.04],'FontSize',16,'FontWeight','bold');
 
 %% ── Save results to workspace ───────────────────────────────────────────────

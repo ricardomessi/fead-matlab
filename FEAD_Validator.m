@@ -1,4 +1,4 @@
-%% FEAD_Validator.m  –  Workflow Validation + Layout Optimization Engine
+﻿%% FEAD_Validator.m  –  Workflow Validation + Layout Optimization Engine
 %  Validates belt drive design and suggests improvements.
 %  Called by FEAD_App.m on every parameter change.
 %

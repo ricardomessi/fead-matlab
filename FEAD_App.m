@@ -1,4 +1,4 @@
-%% FEAD_App.m  –  FEAD Belt Drive Test Rig  – Complete Working App
+﻿%% FEAD_App.m  –  FEAD Belt Drive Test Rig  – Complete Working App
 %  Clean single-file app. All inputs via checkboxes/dropdowns/sliders.
 %  Simulation results update instantly via vectorised physics.
 %  Usage:  >> FEAD_params;  FEAD_App
@@ -52,7 +52,7 @@ PC={AM,[0.55 0.36 0.96],VI,GR,PK,[0.38 0.64 0.98]};
 %% ════════════════════════════════════════════════════════════════════════════
 %  FIGURE  1840×980
 %% ════════════════════════════════════════════════════════════════════════════
-fig = uifigure('Name','FEAD Belt Drive Test Rig  –  Ashok Leyland H6',...
+fig = uifigure('Name','FEAD Belt Drive Test Rig  –  H6 OEM Engine',...
     'Position',[20 30 1840 980],'Color',BG,'Resize','on',...
     'CloseRequestFcn',@cb_close);
 
@@ -413,7 +413,7 @@ function update_plots()
     xl.LabelHorizontalAlignment='center';
     xlabel(S.ax_hub,'Engine RPM','Color',TC,'FontSize',9);
     ylabel(S.ax_hub,'Hub Load  F (N)','Color',TC,'FontSize',9);
-    title(S.ax_hub,'Hub Loads vs RPM   (○ = Gates PDF reference @ 1200 RPM)',...
+    title(S.ax_hub,'Hub Loads vs RPM   (○ = Reference PDF reference @ 1200 RPM)',...
         'Color',AM,'FontWeight','bold','FontSize',10);
     legend(S.ax_hub,'TextColor',TC,'Color',[0.07 0.10 0.17],...
         'Location','northwest','FontSize',8);

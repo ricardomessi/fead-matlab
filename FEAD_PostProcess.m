@@ -1,4 +1,4 @@
-%% FEAD_PostProcess.m  –  Post-simulation analysis of FEAD_TestRig results
+﻿%% FEAD_PostProcess.m  –  Post-simulation analysis of FEAD_TestRig results
 %  Run after simulating FEAD_TestRig.slx to extract, analyse and plot all
 %  signals from the To-Workspace blocks.
 %
@@ -232,7 +232,7 @@ set(ax9,'YTick',1:nc,'YTickLabel',labels,'XLim',[0 110]);
 title(ax9,sprintf('Score: %d/100  (%d/%d passed)',score,report.n_pass,nc),...
     'Color',AM,'FontWeight','bold');
 
-sgtitle(fig,sprintf('Gates FEAD Test Rig — Post-Process Analysis — %s',belt.name),...
+sgtitle(fig,sprintf('FEAD Test Rig — Post-Process Analysis — %s',belt.name),...
     'Color',AM,'FontSize',14,'FontWeight','bold');
 
 %% ── Save to workspace ────────────────────────────────────────────────────────

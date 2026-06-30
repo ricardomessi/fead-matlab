@@ -1,4 +1,4 @@
-%% push_to_github.m  –  Push FEAD model + results to GitHub
+﻿%% push_to_github.m  –  Push FEAD model + results to GitHub
 %  Saves layout JSON, validation Markdown, commits all .m files and pushes.
 %  Token read from environment variable GH_TOKEN (never hardcoded).
 %

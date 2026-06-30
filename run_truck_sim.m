@@ -1,4 +1,4 @@
-%% run_truck_sim.m  –  H6 Truck System simulation & auto-plot results
+﻿%% run_truck_sim.m  –  H6 Truck System simulation & auto-plot results
 %  Simulates 0→80 km/h acceleration, cruise, and braking with
 %  full FEAD parasitic coupling, AMT gear shifts, and road load.
 %
@@ -9,7 +9,7 @@
 if ~exist('engine','var'), FEAD_params; end
 
 fprintf('\n═══════════════════════════════════════════════════════\n');
-fprintf('  H6 Truck System Simulation  –  Ashok Leyland H6\n');
+fprintf('  H6 Truck System Simulation  –  H6 OEM Engine\n');
 fprintf('═══════════════════════════════════════════════════════\n\n');
 
 %% ── Pack ALL parameters into a single struct P ───────────────────────────────
@@ -220,7 +220,7 @@ xlabel(ax9,'Time (s)','Color',TC); ylabel(ax9,'Speed (km/h)','Color',TC);
 title(ax9,'Speed Coloured by Gear','Color',AM,'FontWeight','bold');
 legend(ax9,'TextColor',TC,'Color',AX,'NumColumns',3); grid(ax9,'on');
 
-sgtitle(fig_t,'Ashok Leyland H6 – Full Truck Simulation (ODE45)',...
+sgtitle(fig_t,'H6 OEM Engine – Full Truck Simulation (ODE45)',...
     'Color',AM,'FontSize',15,'FontWeight','bold');
 
 %% ── Save results ─────────────────────────────────────────────────────────────

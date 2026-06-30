@@ -1,4 +1,4 @@
-%% FEAD_BeltLibrary.m  –  Complete Gates & Alternative Belt Catalog
+﻿%% FEAD_BeltLibrary.m  –  Complete Reference & Alternative Belt Catalog
 %  Returns a struct array of available belt types with all physical properties.
 %  Used by FEAD_App.m for belt selection and design validation.
 %
@@ -6,10 +6,10 @@
 % ─────────────────────────────────────────────────────────────────────────────
 function lib = FEAD_BeltLibrary()
 
-% ── Gates Micro-V (Poly-V) belts ─────────────────────────────────────────────
+% ── Micro-V (Poly-V) belts ─────────────────────────────────────────────
 lib(1).id          = 'MT620_AMD_8RIB';
-lib(1).name        = 'Gates MT620 AMD 8-Rib Aramid';
-lib(1).brand       = 'Gates';
+lib(1).name        = 'MT620 AMD 8-Rib Aramid';
+lib(1).brand       = 'Reference';
 lib(1).type        = 'Poly-V (Micro-V)';
 lib(1).ribs        = 8;
 lib(1).pitch_mm    = 3.56;
@@ -26,13 +26,13 @@ lib(1).temp_min    = -40;     % °C
 lib(1).temp_max    = 120;     % °C
 lib(1).core        = 'Aramid';
 lib(1).cover       = 'EPDM';
-lib(1).standard    = 'Gates AMD';
+lib(1).standard    = 'AMD';
 lib(1).part_no     = '8PK1575';
 lib(1).color_rgb   = [0.96 0.62 0.04];
 
 lib(2).id          = 'MT480_6RIB';
-lib(2).name        = 'Gates MT480 6-Rib Polyester';
-lib(2).brand       = 'Gates';
+lib(2).name        = 'Reference MT480 6-Rib Polyester';
+lib(2).brand       = 'Reference';
 lib(2).type        = 'Poly-V (Micro-V)';
 lib(2).ribs        = 6;
 lib(2).pitch_mm    = 3.56;
@@ -49,13 +49,13 @@ lib(2).temp_min    = -30;
 lib(2).temp_max    = 110;
 lib(2).core        = 'Polyester';
 lib(2).cover       = 'EPDM';
-lib(2).standard    = 'Gates MT';
+lib(2).standard    = 'Reference MT';
 lib(2).part_no     = '6PK1480';
 lib(2).color_rgb   = [0.55 0.36 0.96];
 
 lib(3).id          = 'MT620_AMD_6RIB';
-lib(3).name        = 'Gates MT620 AMD 6-Rib Aramid';
-lib(3).brand       = 'Gates';
+lib(3).name        = 'MT620 AMD 6-Rib Aramid';
+lib(3).brand       = 'Reference';
 lib(3).type        = 'Poly-V (Micro-V)';
 lib(3).ribs        = 6;
 lib(3).pitch_mm    = 3.56;
@@ -72,7 +72,7 @@ lib(3).temp_min    = -40;
 lib(3).temp_max    = 120;
 lib(3).core        = 'Aramid';
 lib(3).cover       = 'EPDM';
-lib(3).standard    = 'Gates AMD';
+lib(3).standard    = 'AMD';
 lib(3).part_no     = '6PK1575';
 lib(3).color_rgb   = [0.65 0.54 0.98];
 
@@ -125,9 +125,9 @@ lib(5).part_no     = 'DAY-8PK1575';
 lib(5).color_rgb   = [0.96 0.28 0.71];
 
 % ── Classical V-belts ─────────────────────────────────────────────────────────
-lib(6).id          = 'GATES_A55';
-lib(6).name        = 'Gates A-Section Classical V-Belt';
-lib(6).brand       = 'Gates';
+lib(6).id          = 'Reference_A55';
+lib(6).name        = 'Reference A-Section Classical V-Belt';
+lib(6).brand       = 'Reference';
 lib(6).type        = 'Classical V-Belt';
 lib(6).ribs        = 1;
 lib(6).pitch_mm    = 12.7;  % top width

@@ -1,5 +1,5 @@
-# Gates FEAD Belt Drive Test Rig — MATLAB Suite
-## Ashok Leyland H6 · Simscape / Simulink / Interactive App
+﻿# FEAD Belt Drive Test Rig — MATLAB Suite
+## H6 OEM Engine · Simscape / Simulink / Interactive App
 
 [![GitHub](https://img.shields.io/badge/Repo-ricardomessi%2Ffead--matlab-blue)](https://github.com/ricardomessi/fead-matlab)
 
@@ -41,7 +41,7 @@ fead-matlab/
 │   ├── FEAD_Animation.m       ← Real-time belt drive animation engine
 │   ├── FEAD_Validator.m       ← 8-check validation + layout optimizer
 │   ├── FEAD_DataWindow.m      ← Separate live data window (5 tabs)
-│   ├── FEAD_BeltLibrary.m     ← Belt catalog (6 types: Gates/Conti/Dayco)
+│   ├── FEAD_BeltLibrary.m     ← Belt catalog (6 types: Reference/Conti/Dayco)
 │   └── layout_editor.m        ← Standalone drag-and-drop layout editor
 │
 ├── 🌐 GitHub Integration
@@ -58,7 +58,7 @@ fead-matlab/
 ### Left Panel — Controls
 | Control | Description |
 |---------|-------------|
-| **Belt Selector** | 6 belt types: Gates MT620 AMD (8-rib/6-rib), ContiTech, Dayco, V-belt |
+| **Belt Selector** | 6 belt types: MT620 AMD (8-rib/6-rib), ContiTech, Dayco, V-belt |
 | **RPM Slider** | 400–2500 RPM — all plots update live |
 | **Tension Slider** | 100–1000 N static tension |
 | **Tensioner Position** | FREE / REPLACE / MAX / MEAN / MIN / LOAD |
@@ -92,7 +92,7 @@ fead-matlab/
 | 📊 Data Window | Open separate 5-tab live data window |
 | 🔧 Build Simscape | Build `FEAD_TestRig.slx` and open in Simulink |
 | ⬆ Push to GitHub | Commit layout JSON + validation report |
-| ↺ Reset Datum | Restore Gates PDF reference coordinates |
+| ↺ Reset Datum | Restore Reference PDF reference coordinates |
 | ⬇ Import from Web | Load `.json` exported from web tool |
 
 ---
@@ -199,13 +199,13 @@ Pushes: `latest_layout.json` + `VALIDATION_REPORT.md` + all `.m` files
 
 | Belt | Brand | Ribs | L (mm) | Core | T_max (N) |
 |------|-------|------|--------|------|-----------|
-| MT620 AMD 8-Rib | Gates | 8 | 1577 | Aramid | 3000 |
-| MT620 AMD 6-Rib | Gates | 6 | 1577 | Aramid | 2250 |
-| MT480 6-Rib | Gates | 6 | 1480 | Polyester | 2200 |
+| MT620 AMD 8-Rib | Reference | 8 | 1577 | Aramid | 3000 |
+| MT620 AMD 6-Rib | Reference | 6 | 1577 | Aramid | 2250 |
+| MT480 6-Rib | Reference | 6 | 1480 | Polyester | 2200 |
 | 8PK1600 MultiRib | ContiTech | 8 | 1600 | Aramid | 2900 |
 | HVAC 8PK1575 | Dayco | 8 | 1575 | Aramid | 2950 |
-| A-Section | Gates | 1 | 1397 | Polyester | 1800 |
+| A-Section | Reference | 1 | 1397 | Polyester | 1800 |
 
 ---
 
-*Gates FEAD Advanced Engineering Suite · Ashok Leyland H6 · ISO 281 / Wöhler / Capstan · WLTC Duty Cycle*
+*FEAD Advanced Engineering Suite · H6 OEM Engine · ISO 281 / Wöhler / Capstan · WLTC Duty Cycle*

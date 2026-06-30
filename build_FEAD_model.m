@@ -1,4 +1,4 @@
-%% build_FEAD_model.m  –  FEAD Belt Drive Simscape Model (Robust Port-Handle Build)
+﻿%% build_FEAD_model.m  –  FEAD Belt Drive Simscape Model (Robust Port-Handle Build)
 %  Uses get_param PortHandles to connect blocks — avoids all add_line string errors.
 %  Each pulley is a self-contained subsystem. All signals logged to workspace.
 %

@@ -1,4 +1,4 @@
-function layout_editor()
+﻿function layout_editor()
 %% layout_editor.m  –  Interactive MATLAB GUI for FEAD Pulley Layout Editor
 %  Drag-and-drop pulley positions, edit radius/coordinates numerically,
 %  view live hub-load vectors and belt spans. Updates workspace variables.
@@ -16,7 +16,7 @@ wp         = evalin('base','wp');
 N_pulleys  = numel(pulleys);
 
 %% ── Create figure ──────────────────────────────────────────────────────────
-fig = uifigure('Name','FEAD Layout Editor – Ashok Leyland H6',...
+fig = uifigure('Name','FEAD Layout Editor – H6 OEM Engine',...
     'Position',[100 80 1300 780],...
     'Color',[0.07 0.09 0.15]);
 

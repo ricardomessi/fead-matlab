@@ -1,4 +1,4 @@
-%% FEAD_Animation.m  –  Real-time FEAD Belt Drive Animation Engine
+﻿%% FEAD_Animation.m  –  Real-time FEAD Belt Drive Animation Engine
 %  Creates a live animated 2D model of the belt drive with:
 %   • Rotating pulleys (spokes + hub + ribs)
 %   • Moving belt segments (travelling wave effect)

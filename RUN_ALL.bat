@@ -1,7 +1,7 @@
-@echo off
+﻿@echo off
 echo ================================================================
-echo  Gates FEAD Belt Drive Test Rig  -  MATLAB R2026a Suite
-echo  Ashok Leyland H6  .  Simscape / Simulink / App
+echo  FEAD Belt Drive Test Rig  -  MATLAB R2026a Suite
+echo  H6 OEM Engine  .  Simscape / Simulink / App
 echo ================================================================
 echo.
 echo What would you like to run?
